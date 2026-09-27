@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O widget é desenhado por RemoteViews, que só aceita um punhado de
+     componentes simples: nada de view própria, nada de SVG. Por isso
+     a planta e os escudos são emoji num TextView — o mesmo desenho
+     que o app usa nos selos, e que funciona em qualquer aparelho. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_raiz"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_fundo">
+
+    <TextView
+        android:id="@+id/widget_emoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="30sp"
+        android:layout_marginEnd="10dp"
+        android:text="🌱" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="bottom">
+
+            <TextView
+                android:id="@+id/widget_numero"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:textColor="@color/widget_destaque"
+                android:text="0" />
+
+            <TextView
+                android:id="@+id/widget_escudos"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:layout_marginStart="7dp"
+                android:layout_marginBottom="4dp"
+                android:text="" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_rotulo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="@color/widget_fraco"
+            android:text="dias seguidos" />
+
+        <TextView
+            android:id="@+id/widget_aviso"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/widget_destaque"
+            android:visibility="gone"
+            android:text="Entre hoje!" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,3281 @@
+/* =========================================================
+   Controle Financeiro — estilo base
+   Layout centralizado, responsivo, com menu inferior fixo.
+   ========================================================= */
+
+:root {
+  color-scheme: light;
+
+  /* Pilhas serifadas com fallbacks que existem no Linux e no Windows. */
+  --fonte-titulo: "Iowan Old Style", "Palatino Linotype", Palatino, "URW Palladio L",
+    "P052", "Book Antiqua", Georgia, "Noto Serif", "Liberation Serif", serif;
+  --fonte-texto: Charter, "Bitstream Charter", "Charis SIL", Cambria, Georgia,
+    "Noto Serif", "DejaVu Serif", "Liberation Serif", "Times New Roman", serif;
+
+  --fundo: #eef1f5;
+  --fundo-cartao: #ffffff;
+  --fundo-suave: #f5f7fa;
+  --borda: #dde3ea;
+  --texto: #1c2531;
+  --texto-suave: #64748b;
+  --texto-fraco: #94a3b8;
+
+  --verde: #12805c;
+  --verde-claro: #e6f5ef;
+  --vermelho: #c8353c;
+  --vermelho-claro: #fdecec;
+  --ambar: #b4740b;
+  --ambar-claro: #fdf3e2;
+  --azul: #2563a8;
+  --azul-claro: #e8f0fa;
+
+  /* Cor do texto sobre superfícies coloridas: no claro os fundos são
+     escuros o bastante para texto branco; no escuro eles são claros,
+     e o texto tem de escurecer junto. */
+  --sobre-verde: #ffffff;
+  --sobre-vermelho: #ffffff;
+  --seta-select: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+
+  --sombra: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 20px -8px rgba(16, 24, 40, .14);
+
+  /* Escala de cantos: quanto maior a superfície, mais redondo o canto.
+     É o que dá o ar macio e "de aplicativo" ao conjunto. */
+  --raio: 22px;          /* cartões e blocos                */
+  --raio-medio: 16px;    /* campos, caixas internas         */
+  --raio-pequeno: 12px;  /* miúdos: selos grandes, ícones   */
+  --raio-pilula: 999px;  /* botões e chips                  */
+
+  --dur-tela: 280ms;
+  --dur-cartao: 320ms;
+  --largura: 940px;
+  --altura-menu: 76px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    color-scheme: dark;
+    --fundo: #0f141b;
+    --fundo-cartao: #182029;
+    --fundo-suave: #1e2833;
+    --borda: #2b3745;
+    --texto: #e8eef5;
+    --texto-suave: #93a3b5;
+    --texto-fraco: #6b7d91;
+
+    --verde: #3ddc9a;
+    --verde-claro: #14312a;
+    --vermelho: #ff7b7b;
+    --vermelho-claro: #38191c;
+    --ambar: #f0b552;
+    --ambar-claro: #362a14;
+    --azul: #74b0f5;
+    --azul-claro: #16283d;
+
+    --sobre-verde: #06231a;
+    --sobre-vermelho: #3a0f11;
+    --seta-select: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a3b5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -10px rgba(0, 0, 0, .6);
+  }
+}
+
+:root[data-tema="escuro"] {
+  color-scheme: dark;
+  --fundo: #0f141b;
+  --fundo-cartao: #182029;
+  --fundo-suave: #1e2833;
+  --borda: #2b3745;
+  --texto: #e8eef5;
+  --texto-suave: #93a3b5;
+  --texto-fraco: #6b7d91;
+  --verde: #3ddc9a;
+  --verde-claro: #14312a;
+  --vermelho: #ff7b7b;
+  --vermelho-claro: #38191c;
+  --ambar: #f0b552;
+  --ambar-claro: #362a14;
+  --azul: #74b0f5;
+  --azul-claro: #16283d;
+  --sobre-verde: #06231a;
+  --sobre-vermelho: #3a0f11;
+  --seta-select: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a3b5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -10px rgba(0, 0, 0, .6);
+}
+
+* { box-sizing: border-box; }
+
+/* Rede de segurança: nenhum componente pode reverter o atributo
+   "hidden" ao definir "display" na própria classe (foi o que
+   escondia mal os botões Ver/Remover do comprovante). */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte-texto);
+  font-size: 15.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Títulos e valores num serifado de contraste alto; o corpo num
+   serifado mais neutro, que aguenta texto pequeno melhor. */
+.marca__titulo,
+.modal__titulo,
+.cartao__valor,
+.resumo__valor,
+.detalhe__valor,
+.navmes__rotulo,
+.planta__estagio,
+.vazio__titulo,
+.resumo__titulo {
+  font-family: var(--fonte-titulo);
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* Rótulos em versalete pedem um pouco mais de espaço entre letras. */
+.cartao__rotulo,
+.detalhe__rotulo,
+.campo__rotulo,
+.resumo__rotulo {
+  font-family: var(--fonte-titulo);
+}
+
+/* ---------- Cabeçalho ---------- */
+
+.cabecalho {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--fundo-cartao);
+  border-bottom: 1px solid var(--borda);
+}
+
+.cabecalho__interno {
+  max-width: var(--largura);
+  margin: 0 auto;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.marca__icone {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: var(--verde-claro);
+  color: var(--verde);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.marca__texto { min-width: 0; }
+
+.marca__titulo {
+  margin: 0;
+  font-size: 17.5px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.marca__sub {
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cabecalho__acoes {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+/* ---------- Botões ---------- */
+
+.botao-icone {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--fundo-suave);
+  color: var(--texto-suave);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+  transition: background .15s, color .15s, transform .12s;
+}
+
+.botao-icone:hover {
+  background: var(--verde-claro);
+  color: var(--verde);
+}
+
+.botao-icone:active { transform: scale(.94); }
+.botao-icone:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+
+/* O X de fechar mora sempre no canto direito do topo do modal. */
+.botao-icone--fechar { margin-left: auto; }
+
+/* Todo botão é uma pílula que aceita ícone à esquerda do rótulo. O
+   alvo de toque nunca fica abaixo de 44px de altura no celular. */
+.botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-cartao);
+  color: var(--texto);
+  border-radius: var(--raio-pilula);
+  padding: 10px 18px;
+  min-height: 42px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, transform .12s;
+}
+
+.botao:hover { background: var(--fundo-suave); }
+.botao:active { transform: scale(.97); }
+.botao:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+
+.botao__icone {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.botao__rotulo { min-width: 0; }
+
+.botao--principal {
+  background: var(--verde);
+  border-color: var(--verde);
+  color: var(--sobre-verde);
+}
+
+.botao--principal:hover { filter: brightness(1.06); }
+
+/* Destrutivo secundário: fundo tonal em vez de vermelho chapado —
+   fica visível sem gritar mais alto que o botão de salvar. */
+.botao--perigo {
+  color: var(--vermelho);
+  background: var(--vermelho-claro);
+  border-color: transparent;
+}
+.botao--perigo:hover { background: var(--vermelho-claro); border-color: var(--vermelho); }
+
+.botao:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---------- Conteúdo ---------- */
+
+.conteudo {
+  max-width: var(--largura);
+  margin: 0 auto;
+  padding: 16px 16px calc(var(--altura-menu) + 28px);
+}
+
+/* Contêiner das telas: dá a referência de posicionamento para a
+   tela que sai, de modo que ela fique exatamente sobre a que entra. */
+.telas {
+  position: relative;
+  overflow-x: clip;
+}
+
+.tela { display: none; }
+.tela.ativa { display: block; }
+
+/* ---------- Transição entre telas ---------- */
+
+.tela.entrando {
+  animation: entrar var(--dur-tela) cubic-bezier(.22, .8, .3, 1) both;
+}
+
+.tela.saindo {
+  display: block;
+  position: absolute;
+  inset: 0 0 auto 0;
+  pointer-events: none;
+  animation: sair var(--dur-tela) cubic-bezier(.4, 0, .7, .2) both;
+}
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateX(var(--desloca, 22px)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes sair {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(calc(var(--desloca, 22px) * -1)); }
+}
+
+/* Os cartões entram em cascata, logo atrás da tela. */
+.tela.entrando > * {
+  animation: subir var(--dur-cartao) cubic-bezier(.22, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms + 40ms);
+}
+
+@keyframes subir {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tela.entrando,
+  .tela.saindo,
+  .tela.entrando > * { animation: none !important; }
+  .tela.saindo { display: none; }
+}
+
+/* ---------- Navegador de mês ---------- */
+
+.navmes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.navmes__seta {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--borda);
+  background: var(--fundo-cartao);
+  color: var(--texto-suave);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: none;
+  transition: background .15s, color .15s, transform .12s;
+}
+
+.navmes__seta:hover { background: var(--verde-claro); color: var(--verde); }
+.navmes__seta:active { transform: scale(.92); }
+.navmes__seta svg { width: 21px; height: 21px; }
+
+.navmes__rotulo {
+  min-width: 190px;
+  min-height: 46px;
+  text-align: center;
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pilula);
+  padding: 8px 22px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+}
+
+.navmes__rotulo:hover { background: var(--fundo-suave); }
+
+.navmes__hoje {
+  font-size: 11px;
+  color: var(--texto-fraco);
+  font-weight: 500;
+  display: block;
+  letter-spacing: .02em;
+}
+
+/* ---------- Cartões ---------- */
+
+.grade {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.grade--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.cartao {
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 18px 20px;
+  box-shadow: var(--sombra);
+}
+
+.cartao__rotulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin: 0 0 8px;
+}
+
+/* Ícone que abre o rótulo: diz do que é o número antes de a pessoa
+   ler a legenda. Fica na cor do próprio rótulo, sem chamar atenção. */
+.rotulo__icone {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.cartao__valor {
+  font-size: clamp(22px, 5.2vw, 30px);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cartao__valor--verde { color: var(--verde); }
+.cartao__valor--vermelho { color: var(--vermelho); }
+
+/* O cartão em destaque ganha uma faixa colorida à esquerda; com o
+   canto arredondado grande, ela precisa de um raio próprio pra não
+   virar um talho reto no meio da curva. */
+.cartao--destaque { border-left: 4px solid var(--verde); }
+.cartao--alerta { border-left: 4px solid var(--vermelho); }
+
+.detalhes {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--borda);
+}
+
+.detalhe { flex: 1; min-width: 0; }
+
+.detalhe__rotulo {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+}
+
+.detalhe__valor {
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.detalhe__valor--verde { color: var(--verde); }
+.detalhe__valor--vermelho { color: var(--vermelho); }
+.detalhe__valor--ambar { color: var(--ambar); }
+
+/* ---------- Cartão da fatura ---------- */
+
+.fatura { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.fatura__principal { flex: 1 1 190px; min-width: 0; }
+.fatura__lado { display: flex; gap: 26px; flex-wrap: wrap; }
+.fatura__lado .detalhe { flex: none; }
+.fatura__lado .detalhe__rotulo { white-space: nowrap; }
+.fatura__lado .detalhe__valor { font-size: 17px; }
+
+/* ---------- Planta (frequência de acesso) ---------- */
+
+.planta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: linear-gradient(135deg, var(--verde-claro), var(--fundo-cartao) 70%);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  box-shadow: var(--sombra);
+}
+
+.planta--murcha {
+  background: linear-gradient(135deg, var(--ambar-claro), var(--fundo-cartao) 70%);
+}
+
+.planta__vaso { flex: none; width: 84px; height: 84px; }
+
+.planta__info { min-width: 0; flex: 1; }
+
+.planta__estagio {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.planta__selo {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  color: var(--texto-suave);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.planta__mensagem {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.planta__visita {
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  margin-top: 2px;
+}
+
+/* Animação sutil de balanço, só quando a planta está viva */
+.planta__folhagem { transform-origin: 50px 92px; }
+.planta:not(.planta--murcha) .planta__folhagem { animation: balancar 5s ease-in-out infinite; }
+
+@keyframes balancar {
+  0%, 100% { transform: rotate(-1.4deg); }
+  50% { transform: rotate(1.4deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planta__folhagem { animation: none !important; }
+}
+
+/* ---------- Menu inferior ---------- */
+
+.menu {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  background: var(--fundo-cartao);
+  border-top: 1px solid var(--borda);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.menu__interno {
+  max-width: var(--largura);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: var(--altura-menu);
+  align-items: center;
+  padding: 0 4px;
+}
+
+/* Cada item é ícone dentro de uma pastilha + rótulo embaixo. A
+   pastilha é o que marca a tela ativa — ela cresce por trás do ícone
+   em vez de um risco fino no topo, que quase não se via no celular. */
+.menu__item {
+  border: 0;
+  background: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  padding: 6px 2px;
+  height: 100%;
+  transition: color .18s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu__pastilha {
+  width: 60px;
+  height: 34px;
+  max-width: 100%;
+  border-radius: var(--raio-pilula);
+  display: grid;
+  place-items: center;
+  background: transparent;
+  transition: background .22s cubic-bezier(.22, .8, .3, 1),
+              transform .22s cubic-bezier(.22, .8, .3, 1);
+}
+
+.menu__item svg {
+  width: 25px;
+  height: 25px;
+  transition: stroke-width .18s;
+}
+
+.menu__texto {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  line-height: 1;
+  white-space: nowrap;
+  transition: font-weight .15s;
+}
+
+.menu__item:hover { color: var(--texto-suave); }
+.menu__item:hover .menu__pastilha { background: var(--fundo-suave); }
+
+.menu__item:active .menu__pastilha { transform: scale(.92); }
+
+.menu__item.ativo { color: var(--verde); }
+.menu__item.ativo .menu__pastilha { background: var(--verde-claro); }
+.menu__item.ativo svg { stroke-width: 2.4; }
+.menu__item.ativo .menu__texto { font-weight: 750; }
+
+.menu__item:focus-visible { outline: 0; }
+.menu__item:focus-visible .menu__pastilha {
+  outline: 2px solid var(--verde);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu__pastilha { transition: none; }
+}
+
+/* ---------- Modal ---------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(12, 18, 26, .5);
+  backdrop-filter: blur(9px);
+  animation: modal-fundo .18s ease both;
+}
+
+.modal[hidden] { display: none; }
+
+@keyframes modal-fundo { from { opacity: 0; } to { opacity: 1; } }
+
+.modal__caixa {
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 28px;
+  width: min(560px, 100%);
+  max-height: 88vh;
+  transition: width .15s ease;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .5);
+  animation: modal-entrar .24s cubic-bezier(.22, .8, .3, 1) both;
+}
+
+@keyframes modal-entrar {
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* O formulário de lançamento usa duas colunas de fichas; mais largo
+   que isso as linhas de leitura ficam longas demais. */
+.modal__caixa--larga { width: min(760px, 100%); }
+
+.modal__topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--borda);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--fundo-cartao);
+}
+
+/* Ícone de contexto do modal: diz de que tipo de lançamento se trata
+   antes mesmo de o título ser lido. */
+.modal__icone {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--verde-claro);
+  color: var(--verde);
+}
+
+.modal__icone:empty { display: none; }
+.modal__icone svg { width: 23px; height: 23px; }
+
+.modal__textos { min-width: 0; flex: 1; }
+
+.modal__titulo {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  line-height: 1.25;
+}
+
+.modal__sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+}
+
+.modal__corpo { padding: 20px; }
+
+.modal__rodape {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--fundo-cartao);
+  padding: 14px 20px;
+  border-top: 1px solid var(--borda);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Empurra Cancelar/Salvar para a direita e deixa Excluir na esquerda. */
+.modal__espaco { flex: 1; }
+
+/* ---------- Formulário ---------- */
+
+.campo { margin-bottom: 16px; }
+
+.campo__rotulo {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+  margin-bottom: 6px;
+}
+
+.campo__dica {
+  font-size: 12px;
+  color: var(--texto-fraco);
+  margin-top: 5px;
+}
+
+/* Liga/desliga dentro de um campo de ajustes. A área de toque é a
+   linha inteira, não só o quadradinho: no celular, acertar 16px de
+   caixa é briga perdida. */
+.alternador {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--texto);
+  user-select: none;
+}
+
+.alternador input {
+  width: 19px;
+  height: 19px;
+  flex: none;
+  accent-color: var(--verde);
+  cursor: pointer;
+}
+
+/* Campo de texto no formato "preenchido": fundo tonal, canto macio e
+   altura de toque confortável. A borda só aparece de verdade no foco. */
+.entrada {
+  width: 100%;
+  border: 1px solid var(--borda);
+  background: var(--fundo-suave);
+  color: var(--texto);
+  border-radius: var(--raio-medio);
+  padding: 12px 15px;
+  min-height: 48px;
+  font: inherit;
+  font-size: 15px;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+
+.entrada::placeholder { color: var(--texto-fraco); }
+
+.entrada:hover { border-color: var(--texto-fraco); }
+
+.entrada:focus {
+  outline: none;
+  border-color: var(--verde);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--verde) 22%, transparent);
+}
+
+.linha-botoes { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Estado do arquivo ---------- */
+
+.origem {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-medio);
+  padding: 13px 15px;
+  font-size: 13.5px;
+  margin-bottom: 16px;
+}
+
+.origem__ponto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--verde);
+  flex: none;
+  margin-top: 5px;
+}
+
+.origem--aviso .origem__ponto { background: var(--ambar); }
+
+.origem__caminho {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  color: var(--texto-suave);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Aviso topo ---------- */
+
+.faixa {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ambar-claro);
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--ambar);
+  border-radius: var(--raio-medio);
+  padding: 13px 16px;
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+
+.faixa[hidden] { display: none; }
+.faixa__texto { flex: 1; min-width: 0; }
+
+/* ---------- Placeholder das telas seguintes ---------- */
+
+.vazio {
+  text-align: center;
+  padding: 56px 20px;
+  color: var(--texto-fraco);
+}
+
+.vazio__icone { font-size: 40px; margin-bottom: 10px; }
+.vazio__titulo { font-size: 17px; font-weight: 650; color: var(--texto-suave); margin-bottom: 6px; }
+
+/* ---------- Responsivo ---------- */
+
+@media (max-width: 620px) {
+  .grade--2 { grid-template-columns: 1fr; }
+  .cartao { padding: 14px 15px; }
+  .planta { gap: 13px; padding: 13px 14px; }
+  .planta__vaso { width: 68px; height: 68px; }
+  .navmes__rotulo { min-width: 0; flex: 1; }
+  .marca__sub { display: none; }
+  .fatura { gap: 0; }
+  .fatura__principal { flex: 1 1 100%; }
+  .fatura__lado {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--borda);
+  }
+}
+
+/* ---------- Cores da planta ---------- */
+
+:root {
+  --pl-vaso: #cd8155;
+  --pl-vaso-escuro: #b3673f;
+  --pl-terra: #6d4b36;
+  --pl-verde: #2f9e63;
+  --pl-verde-claro: #4fc07f;
+  --pl-flor: #f06897;
+  --pl-flor-miolo: #ffd166;
+  --pl-seco: #a97b45;
+  --pl-seco-claro: #c79a63;
+  --pl-teia: #9aa7b4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --pl-vaso: #a8613c;
+    --pl-vaso-escuro: #8d4d2d;
+    --pl-terra: #4d3526;
+    --pl-verde: #3ddc9a;
+    --pl-verde-claro: #6ff0b8;
+    --pl-flor: #ff8ab4;
+    --pl-seco: #8a6337;
+    --pl-seco-claro: #a9814d;
+    --pl-teia: #5b6a79;
+  }
+}
+
+:root[data-tema="escuro"] {
+  --pl-vaso: #a8613c;
+  --pl-vaso-escuro: #8d4d2d;
+  --pl-terra: #4d3526;
+  --pl-verde: #3ddc9a;
+  --pl-verde-claro: #6ff0b8;
+  --pl-flor: #ff8ab4;
+  --pl-seco: #8a6337;
+  --pl-seco-claro: #a9814d;
+  --pl-teia: #5b6a79;
+}
+
+.pl-vaso { fill: var(--pl-vaso); }
+.pl-vaso-borda { fill: var(--pl-vaso-escuro); }
+.pl-terra { fill: var(--pl-terra); }
+.pl-caule { fill: none; stroke: var(--pl-verde); stroke-width: 3.4; stroke-linecap: round; }
+.pl-folha { fill: var(--pl-verde-claro); }
+.pl-folha-escura { fill: var(--pl-verde); }
+.pl-flor { fill: var(--pl-flor); }
+.pl-miolo { fill: var(--pl-flor-miolo); }
+.pl-semente { fill: var(--pl-seco); }
+.pl-caule-seco { fill: none; stroke: var(--pl-seco); stroke-width: 3.2; stroke-linecap: round; }
+.pl-folha-seca { fill: var(--pl-seco-claro); }
+.pl-teia { fill: none; stroke: var(--pl-teia); stroke-width: 1.1; stroke-linecap: round; }
+
+/* ---------- Botão pequeno dentro do cartão ---------- */
+
+.cartao__topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.cartao__topo .cartao__rotulo { margin: 0; }
+
+.botao-mini {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-cartao);
+  color: var(--texto-suave);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.botao-mini:hover {
+  background: var(--verde-claro);
+  color: var(--verde);
+  border-color: var(--verde);
+}
+
+.botao-mini--perigo:hover {
+  background: var(--vermelho-claro);
+  color: var(--vermelho);
+  border-color: var(--vermelho);
+}
+
+/* ---------- Comprovante em arquivo ---------- */
+
+.anexo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.anexo .botao-mini { margin-left: 0; }
+
+/* =========================================================
+   Telas de lista (Receitas, Despesas, Devedores, Investimento)
+   ========================================================= */
+
+/* ---------- Resumo do topo ---------- */
+
+.resumo { padding: 14px 18px; }
+
+.resumo__titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: 12px;
+}
+
+.resumo__grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 14px;
+}
+
+.resumo__item { min-width: 0; }
+
+.resumo__rotulo {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: 2px;
+}
+
+.resumo__valor {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.positivo { color: var(--verde); }
+.negativo { color: var(--vermelho); }
+.ambar { color: var(--ambar); }
+
+/* ---------- Barra de busca e ações ---------- */
+
+/* A barra de busca e ações gruda logo abaixo do cabeçalho quando a
+   página desce, para os botões continuarem à mão em listas longas.
+   --topo-fixo é a altura do cabeçalho, medida em app.js. */
+.barra-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 12px;
+  position: sticky;
+  top: var(--topo-fixo, 58px);
+  z-index: 12;
+  padding: 8px 0;
+  background: color-mix(in srgb, var(--fundo) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.busca {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.busca__icone {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: var(--texto-fraco);
+  pointer-events: none;
+}
+
+.busca__campo {
+  width: 100%;
+  border: 1px solid var(--borda);
+  background: var(--fundo-cartao);
+  color: var(--texto);
+  border-radius: var(--raio-pilula);
+  padding: 11px 16px 11px 42px;
+  min-height: 46px;
+  font: inherit;
+  font-size: 15px;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.busca__campo:focus {
+  outline: none;
+  border-color: var(--verde);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--verde) 22%, transparent);
+}
+
+.acoes { display: flex; gap: 7px; flex-wrap: wrap; }
+
+/* Chip de ação: pílula compacta com ícone. É o formato que aguenta
+   seis ações numa fita rolável no celular sem virar um paredão. */
+.botao--acao {
+  padding: 9px 16px 9px 13px;
+  min-height: 42px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.botao--vermelho {
+  background: var(--vermelho);
+  border-color: var(--vermelho);
+  color: var(--sobre-vermelho);
+}
+.botao--vermelho:hover { filter: brightness(1.06); }
+
+.acoes .botao--acao.ligado {
+  background: var(--verde-claro);
+  border-color: var(--verde);
+  color: var(--verde);
+  box-shadow: inset 0 0 0 1px var(--verde);
+}
+
+/* ---------- Tabela ---------- */
+
+.tabela-rolagem {
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  overflow-x: auto;
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tabela th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--borda);
+  white-space: nowrap;
+  background: var(--fundo-suave);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tabela td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--borda);
+  vertical-align: top;
+}
+
+.tabela tbody tr:last-child td { border-bottom: 0; }
+
+.tabela tbody tr {
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.tabela tbody tr:hover { background: var(--fundo-suave); }
+.tabela tbody tr:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: -2px;
+}
+
+.tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabela .forte { font-weight: 650; }
+.tabela .fraco { color: var(--texto-suave); }
+.tabela .nowrap { white-space: nowrap; }
+
+.tabela__vazio {
+  text-align: center;
+  padding: 34px 16px;
+  color: var(--texto-fraco);
+}
+
+.obs {
+  display: block;
+  font-size: 12px;
+  color: var(--texto-fraco);
+  margin-top: 2px;
+}
+
+.rodape-lista {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+  margin: 12px 0 0;
+}
+
+/* ---------- Selos de status ---------- */
+
+.selo {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .02em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.selo--verde { background: var(--verde-claro); color: var(--verde); border-color: var(--verde); }
+.selo--ambar { background: var(--ambar-claro); color: var(--ambar); border-color: var(--ambar); }
+.selo--vermelho { background: var(--vermelho-claro); color: var(--vermelho); border-color: var(--vermelho); }
+.selo--azul { background: var(--azul-claro); color: var(--azul); border-color: var(--azul); }
+.selo--cinza { background: var(--fundo-suave); color: var(--texto-fraco); border-color: var(--borda); }
+
+/* Selo clicável: muda o status na hora, sem abrir o formulário. */
+.selo--clicavel {
+  cursor: pointer;
+  font: inherit;
+  appearance: none;
+}
+.selo--clicavel:hover { filter: brightness(0.94); }
+.selo--clicavel:active { transform: scale(0.97); }
+.selo--clicavel:focus-visible { outline: 2px solid var(--verde); outline-offset: 1px; }
+
+/* ---------- Checkbox de seleção nas linhas ---------- */
+
+/* A seleção não tem coluna própria: a checkbox flutua sobre a margem
+   esquerda da primeira célula, aparecendo no hover (ou quando marcada).
+   Assim a tabela não ganha largura só por causa dela. */
+.celula-inicio {
+  position: relative;
+  padding-left: 34px !important;
+  white-space: nowrap;
+}
+
+.selecionar {
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, background .12s ease;
+}
+
+.tabela tbody tr:hover .selecionar,
+.tabela tbody tr:focus-within .selecionar,
+.selecionar--ativa { opacity: 1; }
+
+.selecionar:hover { background: var(--fundo-suave); }
+
+.linha-check {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--verde);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* Coluna do comprovante: estreita, só o clipe. */
+.col-anexo {
+  width: 42px;
+  text-align: center;
+  padding-left: 4px !important;
+  padding-right: 8px !important;
+}
+
+.anexo-vazio { color: var(--texto-fraco); }
+
+.anexo-clipe {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--verde);
+  cursor: pointer;
+}
+
+.anexo-clipe:hover { background: var(--verde-claro); }
+
+.barra-selecao {
+  position: sticky;
+  top: calc(var(--topo-fixo, 58px) + var(--altura-barra-acoes, 56px));
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  background: var(--verde-claro);
+  border: 1px solid var(--verde);
+  border-radius: var(--raio);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.barra-selecao__acoes .botao--acao {
+  background: var(--fundo-cartao);
+}
+.barra-selecao__texto { font-weight: 650; color: var(--verde); font-size: 13.5px; }
+.barra-selecao__acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+/* ---------- Barra de progresso (meta de investimento) ---------- */
+
+.progresso-cartao { margin-top: 12px; padding: 15px 18px; }
+
+.progresso {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  overflow: hidden;
+}
+
+.progresso__barra {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--verde), var(--verde-claro));
+  transition: width .5s cubic-bezier(.22, .8, .3, 1);
+}
+
+.progresso__legenda {
+  margin-top: 9px;
+  font-size: 12.5px;
+  color: var(--texto-suave);
+}
+
+.faixa--info {
+  background: var(--azul-claro);
+  border-left-color: var(--azul);
+  margin-top: 12px;
+  align-items: flex-start;
+}
+
+/* ---------- Formulário em duas colunas ---------- */
+
+.grade-campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.grade-campos > .campo { grid-column: 1 / -1; }
+.grade-campos > .campo--meia { grid-column: auto; }
+
+.erro {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--vermelho-claro);
+  border: 1px solid var(--vermelho);
+  color: var(--vermelho);
+  border-radius: var(--raio-medio);
+  padding: 12px 15px;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 0 0 18px;
+}
+
+.erro[hidden] { display: none; }
+
+/* A seta do select é um SVG embutido, e a cor dele fica congelada na
+   URL. Por isso existem duas: a variável --seta-select troca junto
+   com o tema. */
+select.entrada {
+  appearance: none;
+  background-image: var(--seta-select);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 18px;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+textarea.entrada { resize: vertical; min-height: 76px; font-family: inherit; line-height: 1.5; }
+
+/* ---------- Responsivo das listas ---------- */
+
+/* Aperto progressivo: antes de virar cartão, a tabela solta as colunas
+   secundárias, deixa os títulos quebrarem e encolhe os respiros. É o
+   que evita a rolagem lateral em janelas médias. */
+@media (max-width: 900px) {
+  .tabela .opcional { display: none; }
+  .tabela { font-size: 13.5px; }
+  .tabela th { white-space: normal; }
+  .tabela th, .tabela td { padding: 9px 10px; }
+  .celula-inicio { padding-left: 27px !important; }
+  .selecionar { width: 26px; height: 26px; }
+  .col-anexo { width: 34px; padding-left: 2px !important; padding-right: 6px !important; }
+  .selo { padding: 3px 7px; }
+}
+
+@media (max-width: 620px) {
+  .grade-campos { grid-template-columns: 1fr; }
+  .grade-campos > .campo--meia { grid-column: 1 / -1; }
+  .resumo__valor { font-size: 19px; }
+  .barra-acoes { gap: 8px; }
+  .tabela th, .tabela td { padding: 9px 11px; }
+  .tabela { font-size: 13.5px; }
+}
+
+/* ---------- Tabelas no celular ----------
+   Uma tabela de seis colunas não cabe em 375px. Abaixo de 620px cada
+   linha vira um bloco de três andares, na mesma ordem em todas as
+   telas: data · status · valor / descrição / categoria · complemento.
+   ---------------------------------------------------------------- */
+
+@media (max-width: 620px) {
+  .tabela .opcional { display: none; }
+
+  .tabela-rolagem { overflow-x: visible; }
+  .tabela thead { display: none; }
+  .tabela, .tabela tbody { display: block; }
+
+  .tabela tr {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: baseline;
+    gap: 2px 9px;
+    padding: 12px 40px 12px 15px;
+    border-bottom: 1px solid var(--borda);
+  }
+
+  .tabela tbody tr:last-child { border-bottom: 0; }
+
+  .tabela td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  /* 1 — data, e a checkbox ancorada no canto de cima */
+  .tabela td:nth-child(1) {
+    grid-column: 1;
+    font-size: 12.5px;
+    color: var(--texto-suave);
+    font-variant-numeric: tabular-nums;
+    padding-left: 0 !important;
+  }
+
+  /* Sem posicionamento próprio, a checkbox se ancora na linha inteira
+     e vai para o canto de cima do cartão, sempre visível (no toque não
+     existe hover). */
+  .tabela td.celula-inicio { position: static; }
+
+  .celula-inicio .selecionar {
+    left: auto;
+    right: 6px;
+    top: 8px;
+    transform: none;
+    opacity: 1;
+  }
+
+  /* 2 — selo de status */
+  .tabela td:nth-child(2) { grid-column: 2; }
+
+  /* 3 — valor */
+  .tabela td:nth-child(3) {
+    grid-column: 3;
+    text-align: right;
+    font-size: 15.5px;
+    font-weight: 700;
+  }
+
+  /* 4 — descrição / nome, ocupando a linha inteira */
+  .tabela td:nth-child(4) {
+    grid-column: 1 / -1;
+    margin-top: 3px;
+    padding-right: 20px;
+  }
+
+  /* 5 e 6 — a linha de complemento */
+  .tabela td:nth-child(5) {
+    grid-column: 1 / 3;
+    font-size: 12.5px;
+  }
+
+  .tabela td:nth-child(6) {
+    grid-column: 3;
+    text-align: right;
+    font-size: 12.5px;
+  }
+
+  /* O clipe do comprovante vai para o canto de baixo; sem anexo, some. */
+  .tabela td.col-anexo {
+    position: absolute;
+    right: 9px;
+    bottom: 8px;
+    width: auto;
+    padding: 0 !important;
+  }
+
+  .tabela td.col-anexo--vazio { display: none; }
+
+  .tabela .obs { margin-top: 1px; }
+  .tabela__vazio { grid-column: 1 / -1; text-align: center; }
+}
+
+/* =========================================================
+   Recompensas e personalização
+   ========================================================= */
+
+/* O cartão da planta virou botão: precisa perder o visual de botão. */
+button.planta {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
+button.planta:hover { border-color: var(--verde); }
+button.planta:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+
+.planta__nivel {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--texto-fraco);
+  align-self: flex-start;
+}
+
+.planta__patente {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* ---------- Patente e progresso ---------- */
+
+.patente {
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.patente__topo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+
+.patente__nome {
+  font-family: var(--fonte-titulo);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.patente__dias { font-size: 12.5px; color: var(--texto-suave); }
+
+.patente__nivel {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--verde);
+  background: var(--verde-claro);
+  border: 1px solid var(--verde);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.patente__proximo {
+  margin-top: 9px;
+  font-size: 12.5px;
+  color: var(--texto-suave);
+}
+
+/* ---------- Marcos de sequência ---------- */
+
+.marcos { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.marco {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-suave);
+  border-radius: 999px;
+  padding: 5px 12px 5px 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.marco--conquistado {
+  background: var(--verde-claro);
+  border-color: var(--verde);
+  color: var(--verde);
+}
+
+.marco--pendente { color: var(--texto-fraco); }
+.marco--pendente .marco__emoji { filter: grayscale(1); opacity: .45; }
+
+.marco__emoji { font-size: 14px; line-height: 1; }
+
+/* ---------- Vitrine de itens ---------- */
+
+.vitrine {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 9px;
+}
+
+.vitrine--curta { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.vitrine--cores { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+
+.item {
+  position: relative;
+  border: 1px solid var(--borda);
+  background: var(--fundo-cartao);
+  border-radius: 11px;
+  padding: 10px 11px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .12s;
+}
+
+.item:hover:not(.item--bloqueado) { border-color: var(--verde); transform: translateY(-1px); }
+
+.item--ativo {
+  border-color: var(--verde);
+  background: var(--verde-claro);
+  box-shadow: inset 0 0 0 1px var(--verde);
+}
+
+/* O item bloqueado continua mostrando parte da paleta: ver o que vem
+   pela frente é o que dá vontade de voltar amanhã. */
+.item--bloqueado {
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+.item--bloqueado .item__nome,
+.item--bloqueado .item__resumo { color: var(--texto-fraco); }
+.item--bloqueado .item__amostra { filter: grayscale(.45) contrast(.9); }
+.item--bloqueado .item__previa { color: var(--texto-fraco); }
+
+.item__nome {
+  font-size: 13px;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.item__resumo {
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.item__trava {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ambar);
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Amostra de paleta: três faixas com as cores do tema */
+.item__amostra {
+  display: flex;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  border: 1px solid var(--borda);
+}
+
+.item__amostra span { flex: 1; }
+.item__amostra span:nth-child(3) { flex: .6; }
+
+.bolinha {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(128, 128, 128, .35);
+  margin-bottom: 7px;
+}
+
+.item__previa {
+  font-size: 15px;
+  font-weight: 650;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Os fundos ilustrados são desenhados em SVG pelo JS (fundos.js),
+   a partir das cores do tema, e aplicados direto no body. Aqui fica
+   só o que não depende da paleta. */
+
+body { background-attachment: fixed; }
+
+/* =========================================================
+   Camada viva dos temas Geek
+   =========================================================
+   O papel de parede é um SVG embutido como background-image, e o
+   navegador trata isso como foto: animação lá dentro não roda. Quem
+   se mexe, então, é esta camada — um elemento de verdade, entre o
+   papel de parede e o conteúdo.
+
+   Regra de ouro daqui: só `transform` e `opacity`. São as duas
+   propriedades que a placa de vídeo resolve sozinha, sem refazer o
+   desenho da página a cada quadro. Qualquer outra coisa animada
+   atrás de uma tabela que rola faz o app parecer lento e come
+   bateria — e este app é usado no celular todo dia.
+   ========================================================= */
+
+.fundo-vivo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* O conteúdo sobe para cima da camada. O cabeçalho e o menu já têm
+   camada própria; só o miolo precisava disto. */
+.conteudo { position: relative; z-index: 1; }
+
+/* Fora da aba, nada anima: o navegador até segura parte disso
+   sozinho, mas garantir é de graça. */
+.fundo-vivo--parado,
+.fundo-vivo--parado::before,
+.fundo-vivo--parado::after { animation-play-state: paused !important; }
+
+/* ---------- Neon: letreiros respirando na chuva ---------- */
+
+:root[data-paleta="neon"] .fundo-vivo::before,
+:root[data-paleta="neon"] .fundo-vivo::after {
+  content: "";
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 50%;
+  opacity: .5;
+  filter: blur(60px);
+  will-change: transform;
+}
+
+:root[data-paleta="neon"] .fundo-vivo::before {
+  top: -22vmax;
+  left: -18vmax;
+  background: radial-gradient(circle, var(--verde) 0%, transparent 62%);
+  animation: derivaGlow 34s ease-in-out infinite alternate;
+}
+
+:root[data-paleta="neon"] .fundo-vivo::after {
+  right: -20vmax;
+  bottom: -24vmax;
+  background: radial-gradient(circle, var(--azul) 0%, transparent 62%);
+  animation: derivaGlow 41s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes derivaGlow {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(6vmax, 4vmax, 0) scale(1.18); }
+}
+
+/* ---------- Nebulosa: poeira girando devagar ---------- */
+
+:root[data-paleta="nebulosa"] .fundo-vivo::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150vmax;
+  height: 150vmax;
+  margin: -75vmax 0 0 -75vmax;
+  opacity: .4;
+  filter: blur(70px);
+  background:
+    radial-gradient(circle at 34% 40%, var(--verde) 0%, transparent 34%),
+    radial-gradient(circle at 66% 62%, var(--azul, var(--verde)) 0%, transparent 30%);
+  animation: giroNebulosa 150s linear infinite;
+  will-change: transform;
+}
+
+@keyframes giroNebulosa {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ---------- Masmorra: a tocha tremendo na parede ---------- */
+
+:root[data-paleta="masmorra"] .fundo-vivo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 46% at 50% 8%, var(--verde) 0%, transparent 60%);
+  opacity: .17;
+  animation: tremorTocha 5.5s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes tremorTocha {
+  0%, 100% { opacity: .17; transform: scale(1); }
+  23%      { opacity: .11; transform: scale(1.03); }
+  41%      { opacity: .21; transform: scale(.99); }
+  62%      { opacity: .13; transform: scale(1.04); }
+  80%      { opacity: .19; transform: scale(1.01); }
+}
+
+/* ---------- Arcade: o campo de estrelas subindo ---------- */
+
+:root[data-paleta="arcade"] .fundo-vivo::before,
+:root[data-paleta="arcade"] .fundo-vivo::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 200%;
+  top: 0;
+  will-change: transform;
+  /* Pixels soltos, em duas camadas com velocidades diferentes: é o
+     que dá a sensação de profundidade das fases de nave. */
+  background-repeat: repeat;
+}
+
+:root[data-paleta="arcade"] .fundo-vivo::before {
+  background-image:
+    radial-gradient(var(--verde) 1px, transparent 1.2px),
+    radial-gradient(var(--azul, var(--verde)) 1px, transparent 1.2px);
+  background-size: 137px 137px, 211px 211px;
+  background-position: 0 0, 70px 90px;
+  opacity: .5;
+  animation: subirEstrelas 26s linear infinite;
+}
+
+:root[data-paleta="arcade"] .fundo-vivo::after {
+  background-image: radial-gradient(var(--texto-fraco) 1.6px, transparent 1.8px);
+  background-size: 283px 283px;
+  opacity: .3;
+  animation: subirEstrelas 58s linear infinite;
+}
+
+@keyframes subirEstrelas {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, -50%, 0); }
+}
+
+/* ---------- Terminal: o tubo de raios catódicos ---------- */
+
+/* As linhas de varredura ficam POR CIMA de tudo, inclusive dos
+   modais: num tubo de verdade o vidro está na frente da imagem. */
+:root[data-paleta="terminal"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, .05) 0 1px,
+    transparent 1px 3px
+  );
+  animation: cintilarTubo 6.5s steps(1, end) infinite;
+}
+
+/* O brilho do fósforo nos cantos e a barra de varredura descendo. */
+:root[data-paleta="terminal"] .fundo-vivo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 22vmin 6vmin rgba(0, 0, 0, .5);
+  opacity: .55;
+  z-index: 2;
+}
+
+:root[data-paleta="terminal"] .fundo-vivo::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -30%;
+  height: 22%;
+  background: linear-gradient(to bottom, transparent, var(--verde), transparent);
+  opacity: .05;
+  animation: varreduraTubo 7.5s linear infinite;
+  will-change: transform;
+  z-index: 3;
+}
+
+/* O terminal de mentira (terminalVivo.js). Fica entre a vinheta dos
+   cantos, que o escurece como num tubo, e a barra de varredura.
+
+   Ele toma o lugar do papel de parede de ícones: um terminal de
+   verdade não tem desenhos espalhados atrás do texto. */
+:root[data-paleta="terminal"] body { background-image: none !important; }
+
+.term {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 18px 22px;
+  overflow: hidden;
+  /* A camada se redesenha sozinha a cada tecla; `strict` avisa o
+     navegador que nada aqui dentro mexe no resto da página. */
+  contain: strict;
+  font-family: "DejaVu Sans Mono", "Ubuntu Mono", "Cascadia Mono", Consolas,
+    "Liberation Mono", "Droid Sans Mono", monospace;
+  font-size: 13px;
+  line-height: 19px;
+  white-space: pre;
+  color: var(--verde);
+  text-shadow: 0 0 6px currentColor;
+  opacity: .26;
+}
+
+:root[data-paleta="terminal"] .term { display: block; }
+
+/* No claro o fósforo vira tinta escura sobre papel: o brilho some e
+   a opacidade desce, senão o texto compete com os números. */
+:root[data-paleta="terminal"]:not([data-tema="escuro"]) .term { text-shadow: none; opacity: .17; }
+@media (prefers-color-scheme: dark) {
+  :root[data-paleta="terminal"]:not([data-tema="claro"]) .term { text-shadow: 0 0 6px currentColor; opacity: .26; }
+}
+
+/* A vinheta é sombra: sobre fundo escuro ela some nos cantos como num
+   tubo, mas sobre o fundo claro vira uma mancha cinza na tela toda. */
+:root[data-paleta="terminal"]:not([data-tema="escuro"]) .fundo-vivo::before { opacity: .16; }
+@media (prefers-color-scheme: dark) {
+  :root[data-paleta="terminal"]:not([data-tema="claro"]) .fundo-vivo::before { opacity: .55; }
+}
+
+/* A saída um tom abaixo do comando, como num terminal com cores. */
+.term__linha:not(.term__linha--cmd) { opacity: .72; }
+
+.term__cursor { animation: piscarCursor 1.06s steps(1, end) infinite; }
+
+@keyframes piscarCursor {
+  0%   { opacity: 1; }
+  50%  { opacity: 0; }
+}
+
+.fundo-vivo--parado .term__cursor { animation-play-state: paused; }
+
+@media (max-width: 620px) {
+  .term { font-size: 11px; line-height: 16px; padding: 12px; }
+}
+
+@keyframes varreduraTubo {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 600%, 0); }
+}
+
+/* Cintilação: o tubo "respira" de leve, como quem perde um quadro. */
+@keyframes cintilarTubo {
+  0%, 96%, 100% { opacity: 1; }
+  97%           { opacity: .82; }
+  98%           { opacity: 1; }
+  99%           { opacity: .9; }
+}
+
+/* Quem pediu menos movimento no sistema recebe tudo parado. O
+   desenho fica; só o movimento sai. */
+@media (prefers-reduced-motion: reduce) {
+  .fundo-vivo,
+  .fundo-vivo::before,
+  .fundo-vivo::after,
+  body::after,
+  .term__cursor { animation: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item:hover { transform: none; }
+}
+
+@media (max-width: 620px) {
+  .vitrine { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  .vitrine--cores { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .planta__nivel { display: none; }
+}
+
+
+
+/* ---------- Recordes da planta ---------- */
+
+.recordes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+}
+
+.recorde {
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.recorde__valor {
+  font-family: var(--fonte-titulo);
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.recorde__rotulo {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-top: 1px;
+}
+
+/* ---------- Famílias de tema ---------- */
+
+.familia + .familia { margin-top: 14px; }
+
+.familia__nome {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.familia__nome::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--borda);
+}
+
+/* Com fundo ilustrado, os cartões precisam ficar opacos para o texto
+   continuar legível por cima do desenho. */
+:root[data-fundo="imagem"] .cartao,
+:root[data-fundo="imagem"] .tabela-rolagem,
+:root[data-fundo="imagem"] .planta,
+:root[data-fundo="imagem"] .cabecalho,
+:root[data-fundo="imagem"] .menu {
+  backdrop-filter: blur(6px);
+}
+
+:root[data-fundo="imagem"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--fundo);
+  opacity: .55;
+}
+
+
+
+/* =========================================================
+   Redesenho de interface — fichas, chips e folha inferior
+   =========================================================
+   O eixo do desenho é o mesmo do aplicativo do Gemini: ícone
+   grande e legível na frente de cada coisa, canto bem redondo,
+   alvo de toque nunca menor que 44px e uma pastilha colorida
+   marcando o que está ativo. Tudo escrito em cima dos tokens
+   de tema, para continuar valendo nas paletas desbloqueáveis.
+   ========================================================= */
+
+/* ---------- Fita de ações rolável ---------- */
+
+/* No celular seis botões empilhados comiam meia tela antes da lista
+   começar. Viraram uma fita que rola de lado: a ação principal fica
+   na frente, as outras a um arrasto de distância. */
+.acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.acoes .botao--acao { flex: none; }
+
+/* ---------- Seções do formulário ---------- */
+
+.secao + .secao {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--borda);
+}
+
+.secao__titulo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--fonte-titulo);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: 14px;
+}
+
+.secao__titulo::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--borda);
+}
+
+.secao__grade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 14px;
+}
+
+.secao__grade > .campo { grid-column: 1 / -1; margin-bottom: 0; }
+.secao__grade > .campo--meia { grid-column: auto; }
+
+/* ---------- Ficha de campo ---------- */
+
+/* Cada campo se apresenta: ícone, nome por extenso e, embaixo, uma
+   linha dizendo para que serve. Era esta linha que antes sumia dentro
+   do "title" e deixava o formulário adivinhatório. */
+.campo--ficha { min-width: 0; }
+
+.campo__cabeca {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 7px;
+}
+
+.campo__icone {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--fundo-suave);
+  color: var(--texto-suave);
+  transition: background .15s, color .15s;
+}
+
+.campo__icone svg { width: 16px; height: 16px; }
+
+/* O campo em foco acende o próprio ícone — ajuda a saber onde se está
+   num formulário longo, sobretudo no celular. */
+.campo--ficha:focus-within .campo__icone {
+  background: var(--verde-claro);
+  color: var(--verde);
+}
+
+.campo__nome {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--texto);
+  letter-spacing: -.005em;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.campo__obrigatorio {
+  color: var(--vermelho);
+  margin-left: 2px;
+  font-weight: 700;
+}
+
+.campo--ficha .campo__dica {
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+  margin: 6px 0 0;
+  line-height: 1.4;
+  padding-left: 37px;
+}
+
+/* ---------- Escolha segmentada (status, sim/não) ---------- */
+
+/* Duas ou três opções não merecem um menu suspenso: viram botões
+   lado a lado, todos à vista, com o escolhido preenchido. */
+.opcoes {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.opcao {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-suave);
+  color: var(--texto-suave);
+  border-radius: var(--raio-pilula);
+  padding: 10px 14px;
+  min-height: 46px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s, transform .12s;
+}
+
+.opcao:hover { border-color: var(--texto-fraco); }
+.opcao:active { transform: scale(.97); }
+.opcao:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+
+.opcao__marca {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  opacity: 0;
+  transition: opacity .15s;
+}
+
+.opcao--ativa {
+  background: var(--verde-claro);
+  border-color: var(--verde);
+  color: var(--verde);
+  font-weight: 700;
+}
+
+.opcao--ativa .opcao__marca { opacity: 1; }
+
+/* Cores próprias por significado: pago/recebido em verde, pendente em
+   âmbar, aguardando em azul — o mesmo código de cor dos selos da lista. */
+.opcao--ativa.opcao--verde { background: var(--verde-claro); border-color: var(--verde); color: var(--verde); }
+.opcao--ativa.opcao--ambar { background: var(--ambar-claro); border-color: var(--ambar); color: var(--ambar); }
+.opcao--ativa.opcao--azul { background: var(--azul-claro); border-color: var(--azul); color: var(--azul); }
+.opcao--ativa.opcao--vermelho { background: var(--vermelho-claro); border-color: var(--vermelho); color: var(--vermelho); }
+
+/* ---------- Interruptor (era a caixinha "Fixa") ---------- */
+
+/* "☑ Sim" não dizia sim para quê. Agora é uma linha inteira com nome,
+   explicação e uma chave — dá para tocar em qualquer ponto dela. */
+.interruptor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-medio);
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s, border-color .15s;
+}
+
+.interruptor:hover { border-color: var(--texto-fraco); }
+
+.interruptor__texto { flex: 1; min-width: 0; }
+
+.interruptor__nome {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.interruptor__dica {
+  display: block;
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.interruptor input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.interruptor__chave {
+  position: relative;
+  width: 50px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--raio-pilula);
+  background: var(--borda);
+  border: 2px solid var(--borda);
+  transition: background .2s cubic-bezier(.22, .8, .3, 1), border-color .2s;
+}
+
+.interruptor__chave::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--fundo-cartao);
+  transform: translateY(-50%);
+  transition: transform .2s cubic-bezier(.22, .8, .3, 1), width .2s, height .2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+}
+
+.interruptor input:checked + .interruptor__chave {
+  background: var(--verde);
+  border-color: var(--verde);
+}
+
+.interruptor input:checked + .interruptor__chave::after {
+  transform: translateY(-50%) translateX(20px);
+  width: 22px;
+  height: 22px;
+  left: 1px;
+}
+
+.interruptor input:focus-visible + .interruptor__chave {
+  outline: 2px solid var(--verde);
+  outline-offset: 3px;
+}
+
+.interruptor:has(input:checked) {
+  background: var(--verde-claro);
+  border-color: var(--verde);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interruptor__chave,
+  .interruptor__chave::after { transition: none; }
+}
+
+/* ---------- Anexo dentro da ficha ---------- */
+
+.anexo {
+  gap: 8px;
+}
+
+.campo--ficha .anexo .botao { min-height: 44px; }
+
+/* ---------- Selos maiores, para o dedo ---------- */
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  padding: 4px 12px;
+  min-height: 28px;
+  border-radius: var(--raio-pilula);
+}
+
+.selo--clicavel { min-height: 32px; }
+
+/* ---------- Folha inferior no celular ---------- */
+
+@media (max-width: 620px) {
+  /* O modal deixa de ser uma caixa no meio da tela e passa a subir de
+     baixo, colado na borda — é onde o polegar alcança, e é o formato
+     que o sistema usa em todo diálogo de celular. */
+  .modal {
+    place-items: end center;
+    padding: 0;
+  }
+
+  .modal__caixa {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 28px 28px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    animation: folha-subir .26s cubic-bezier(.22, .8, .3, 1) both;
+  }
+
+  .modal__caixa--larga { width: 100%; }
+
+  @keyframes folha-subir {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+  }
+
+  /* Alça de arrasto: o sinal visual de que aquilo é uma folha que
+     veio de baixo. Fica presa no topo grudado, não rola com o corpo. */
+  .modal__topo {
+    padding-top: 22px;
+  }
+
+  .modal__topo::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--borda);
+  }
+
+  .modal__titulo { font-size: 18px; }
+  .modal__icone { width: 40px; height: 40px; border-radius: 13px; }
+
+  /* Rodapé: Salvar ocupa a linha inteira embaixo, no alcance do
+     polegar; o resto divide a linha de cima. */
+  .modal__rodape {
+    gap: 8px;
+    padding: 12px 16px 14px;
+  }
+
+  .modal__espaco { display: none; }
+
+  .modal__rodape > .botao { flex: 1 1 0; min-width: 0; }
+
+  #btnConfirmarFormulario { flex: 1 1 100%; }
+
+  .modal__corpo { padding: 16px; }
+
+  .secao__grade { grid-template-columns: 1fr; gap: 15px; }
+  .secao__grade > .campo--meia { grid-column: 1 / -1; }
+
+  /* A fita de ações rola de lado em vez de empilhar. */
+  .acoes {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    padding: 2px 14px 2px 0;
+    margin-right: -14px;
+    /* Esmaece a borda direita: mostra que ainda há botão adiante. */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .acoes::-webkit-scrollbar { display: none; }
+  .acoes .botao--acao { scroll-snap-align: start; }
+
+  .busca { flex: 1 1 100%; }
+
+  /* Linhas da lista com mais respiro e alvo de toque maior. */
+  .tabela tr {
+    gap: 3px 10px;
+    padding: 14px 42px 14px 14px;
+  }
+
+  .celula-inicio .selecionar {
+    width: 34px;
+    height: 34px;
+    right: 4px;
+    top: 10px;
+  }
+
+  .tabela td:nth-child(3) { font-size: 16.5px; }
+}
+
+@media (max-width: 400px) {
+  .menu__texto { font-size: 10.5px; }
+  .menu__pastilha { width: 54px; height: 32px; }
+  .menu__item svg { width: 23px; height: 23px; }
+}
+
+/* ---------- Ajustes no computador ---------- */
+
+@media (min-width: 621px) {
+  /* Com espaço de sobra, a fita vira duas fileiras alinhadas à
+     esquerda e o botão principal continua sendo o primeiro. */
+  .acoes { flex-wrap: wrap; }
+}
+
+/* ---------- Ajustes de contraste ---------- */
+
+/* A pastilha do menu e o quadradinho do ícone de campo precisavam
+   valer nos dois modos. Um tom fixo que funciona no claro some no
+   escuro; misturar a própria cor de destaque com transparência
+   resolve os dois de uma vez, e continua acompanhando cada tema. */
+.menu__item.ativo .menu__pastilha {
+  background: color-mix(in srgb, var(--verde) 22%, transparent);
+}
+
+.campo__icone {
+  background: color-mix(in srgb, var(--texto-suave) 14%, transparent);
+}
+
+.campo--ficha:focus-within .campo__icone,
+.interruptor:has(input:checked) .campo__icone {
+  background: color-mix(in srgb, var(--verde) 24%, transparent);
+  color: var(--verde);
+}
+
+/* ---------- Caixa de seleção da linha ---------- */
+
+/* No celular ela fica sempre visível; sem estilo próprio era um
+   quadrado cinza berrante disputando espaço com o valor. */
+.linha-check {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--texto-fraco);
+  border-radius: 6px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transition: background .15s, border-color .15s;
+}
+
+.linha-check:checked {
+  background: var(--verde);
+  border-color: var(--verde);
+}
+
+.linha-check:checked::after {
+  content: "";
+  width: 10px;
+  height: 6px;
+  border: 2px solid var(--sobre-verde);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.linha-check:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+
+/* ---------- Barra de seleção no celular ---------- */
+
+@media (max-width: 620px) {
+  /* Três botões de rótulo comprido empilhavam em três andares e
+     empurravam a lista para fora da tela. Viram a mesma fita rolável
+     da barra de ações, logo abaixo do texto do total selecionado. */
+  .barra-selecao { gap: 10px; padding: 12px 0 12px 14px; }
+
+  .barra-selecao__texto { flex: 1 1 100%; padding-right: 14px; }
+
+  .barra-selecao__acoes {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    padding-right: 28px;
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .barra-selecao__acoes::-webkit-scrollbar { display: none; }
+  .barra-selecao__acoes .botao { flex: none; scroll-snap-align: start; }
+}
+
+/* =========================================================
+   Respiro no celular
+   =========================================================
+   As regras antigas de celular *encolhiam* os respiros para
+   fazer caber mais coisa na tela. Só que numa tela estreita é
+   justamente o espaço em branco que separa um bloco do outro —
+   sem ele tudo vira uma parede única de texto. Aqui a mão é ao
+   contrário: no celular o espaçamento fica igual ou maior que
+   no computador, e quem "cede" é a quantidade de coisa visível
+   de uma vez, não a legibilidade.
+   ========================================================= */
+
+@media (max-width: 620px) {
+  body { font-size: 16px; }
+
+  .conteudo {
+    padding: 20px 16px calc(var(--altura-menu) + 36px);
+  }
+
+  /* ---------- Cartões ---------- */
+
+  /* Volta ao respiro do computador em vez de encolher para 14px. */
+  .cartao { padding: 20px; }
+
+  .grade {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .cartao__rotulo { margin-bottom: 10px; }
+
+  .detalhes {
+    gap: 14px;
+    margin-top: 18px;
+    padding-top: 16px;
+  }
+
+  .detalhe__rotulo { margin-bottom: 3px; }
+
+  .resumo { padding: 18px 20px; }
+  .resumo__titulo { margin-bottom: 14px; }
+  .resumo__grade { gap: 18px; }
+  .resumo__valor { font-size: 22px; }
+
+  .fatura__lado {
+    margin-top: 18px;
+    padding-top: 16px;
+  }
+
+  /* ---------- Cabeçalho e navegação de mês ---------- */
+
+  .cabecalho__interno { padding: 12px 14px; }
+
+  .navmes {
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .planta {
+    gap: 16px;
+    padding: 18px 16px;
+    margin-bottom: 14px;
+  }
+
+  .planta__vaso { width: 72px; height: 72px; }
+  .planta__mensagem { margin-top: 5px; }
+  .planta__visita { margin-top: 4px; }
+
+  .faixa {
+    gap: 14px;
+    padding: 16px;
+    margin-bottom: 18px;
+  }
+
+  /* ---------- Barra de busca e ações ---------- */
+
+  .barra-acoes {
+    gap: 12px;
+    margin: 18px 0 16px;
+    padding: 10px 0 12px;
+  }
+
+  .barra-selecao { padding: 14px 0 14px 16px; }
+
+  /* ---------- Linhas da lista ---------- */
+
+  /* Cada lançamento é um bloco de três andares. Com 12px de
+     recheio eles se encostavam; com 18px cada linha vira um
+     cartão que o olho separa sozinho. */
+  .tabela tr {
+    gap: 6px 12px;
+    padding: 18px 46px 18px 16px;
+  }
+
+  .tabela td:nth-child(4) { margin-top: 6px; }
+
+  .tabela .obs { margin-top: 3px; }
+
+  .celula-inicio .selecionar { top: 12px; }
+
+  .tabela td.col-anexo { right: 12px; bottom: 12px; }
+
+  .rodape-lista { margin-top: 16px; }
+
+  /* ---------- Formulário na folha ---------- */
+
+  .modal__corpo { padding: 20px 18px 24px; }
+
+  .modal__topo { padding: 24px 18px 16px; }
+
+  .secao__grade { gap: 22px; }
+
+  .secao + .secao {
+    margin-top: 26px;
+    padding-top: 24px;
+  }
+
+  .secao__titulo { margin-bottom: 18px; }
+
+  .campo__cabeca { margin-bottom: 10px; }
+
+  .campo--ficha .campo__dica { margin-top: 8px; }
+
+  .opcoes { gap: 9px; }
+
+  .interruptor { padding: 14px; gap: 14px; }
+
+  .modal__rodape {
+    gap: 10px;
+    padding: 14px 16px 16px;
+  }
+
+  /* ---------- Modais estáticos ---------- */
+
+  .campo { margin-bottom: 22px; }
+  .origem { padding: 15px; margin-bottom: 20px; }
+  .linha-botoes { gap: 10px; }
+  .recordes { gap: 10px; }
+  .marcos { gap: 10px; }
+}
+
+/* ---------- Escolha segmentada: opção vazia e tamanho ---------- */
+
+/* O botão de "sem escolha" fica visivelmente mais apagado que os
+   outros: ele é a ausência de resposta, não uma resposta a mais. */
+.opcao--vazia {
+  color: var(--texto-fraco);
+  flex: 0 1 auto;
+}
+
+.opcao--vazia.opcao--ativa {
+  background: var(--fundo-suave);
+  border-color: var(--texto-fraco);
+  color: var(--texto-suave);
+}
+
+/* Com cinco ou seis opções a fileira quebra em linhas; um piso de
+   largura evita que sobre um botão espremido sozinho no fim. */
+.opcao { min-width: 116px; }
+.opcao--vazia { min-width: 84px; }
+
+/* ---------- Menu suspenso nativo ---------- */
+
+/* A lista que o <select> abre é desenhada pelo sistema, e quase nada
+   de CSS chega nela. O que dá para fazer é engordar as linhas nos
+   navegadores que respeitam (Chromium recente) e deixar o campo
+   fechado alto e folgado — o resto virou botão de verdade. */
+select.entrada { min-height: 52px; }
+
+select.entrada option {
+  font-size: 15px;
+  padding: 12px 10px;
+  min-height: 40px;
+  background: var(--fundo-cartao);
+  color: var(--texto);
+}
+
+@media (max-width: 620px) {
+  .opcao {
+    min-width: 132px;
+    min-height: 50px;
+    font-size: 15px;
+  }
+  .opcao--vazia { min-width: 92px; }
+  select.entrada { min-height: 54px; }
+}
+
+/* ---------- Visor de comprovante ---------- */
+
+/* O anexo é mostrado dentro do app: o navegador bloqueia abrir um
+   data: como página, então a imagem e o PDF vêm de um blob:. */
+
+.visor {
+  padding: 0;
+  background: var(--fundo-suave);
+  min-height: 300px;
+  display: grid;
+  place-items: center;
+}
+
+.visor__imagem {
+  max-width: 100%;
+  max-height: 70vh;
+  display: block;
+}
+
+.visor__quadro {
+  width: 100%;
+  height: 70vh;
+  border: 0;
+  display: block;
+}
+
+.visor__nome {
+  font-size: 13px;
+  color: var(--texto-fraco);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.visor__recado {
+  margin: 0;
+  padding: 40px 28px;
+  text-align: center;
+  color: var(--texto-suave);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ---------- Rega do dia ---------- */
+
+/* Roda uma vez por dia, na primeira abertura: o regador desce pelo
+   canto, inclina, pingam gotas, a folhagem bebe e o contador sobe.
+   Tudo dentro do mesmo SVG da planta, então acompanha o tamanho dela. */
+
+.rega { opacity: 0; }
+.rega--tocando { opacity: 1; }
+
+/* Tom de metal, não o verde do tema: em cima das folhas verdes o
+   regador sumia. */
+.rega__corpo,
+.rega__bico {
+  fill: var(--texto-suave);
+  opacity: .95;
+}
+
+.rega__alca {
+  fill: none;
+  stroke: var(--texto-suave);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  opacity: .95;
+}
+
+.rega__regador {
+  transform-box: fill-box;
+  transform-origin: 70% 80%;
+  transform: translate(26px, -20px) rotate(10deg);
+}
+
+.rega--tocando .rega__regador { animation: regador 2.3s ease-in-out forwards; }
+
+@keyframes regador {
+  0%   { transform: translate(26px, -20px) rotate(10deg); opacity: 0; }
+  18%  { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  32%  { transform: translate(0, 0) rotate(-22deg); }
+  70%  { transform: translate(0, 0) rotate(-22deg); }
+  84%  { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(26px, -20px) rotate(10deg); opacity: 0; }
+}
+
+.rega__gota {
+  fill: var(--azul, #6fc0f5);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.rega--tocando .rega__gota { animation: gota .75s ease-in 2; }
+
+@keyframes gota {
+  0%   { opacity: 0; transform: translateY(0) scaleY(.55); }
+  20%  { opacity: .85; }
+  100% { opacity: 0; transform: translateY(15px) scaleY(1.3); }
+}
+
+/* A folhagem dá uma esticada quando a água chega. Precisa vencer a
+   animação de balanço que já roda nela. */
+.planta .planta__folhagem.folhagem--bebendo {
+  animation: beber .9s ease-out;
+}
+
+@keyframes beber {
+  0%, 100% { transform: scale(1); }
+  35%      { transform: scale(1.07, 1.12); }
+  65%      { transform: scale(.99, .96); }
+}
+
+/* O número do dia pulsa enquanto sobe. */
+.planta__selo--contando {
+  animation: selo-sobe .42s ease-out;
+  animation-iteration-count: 3;
+}
+
+@keyframes selo-sobe {
+  0%, 100% { transform: scale(1); }
+  40%      { transform: scale(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rega { display: none; }
+  .planta .planta__folhagem.folhagem--bebendo,
+  .planta__selo--contando { animation: none !important; }
+}
+
+/* ---------- Aviso da sincronia ---------- */
+
+/* Aparece ao puxar a tela para baixo no celular, no F5 do computador e
+   em qualquer sincronização automática. Fica sobre o cabeçalho, some
+   sozinho. */
+
+.sincaviso {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 0 0 14px 14px;
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-top: 0;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .5);
+  font-size: 13px;
+  color: var(--texto-suave);
+  white-space: nowrap;
+  max-width: 92vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* --puxada acompanha o dedo; sem ela o aviso fica escondido acima. */
+  transform: translate(-50%, calc(-100% + var(--puxada, 0px)));
+  transition: transform .22s ease;
+  pointer-events: none;
+}
+
+.sincaviso--visivel { transform: translate(-50%, 0); }
+.sincaviso--puxando { transition: none; }
+
+.sincaviso__roda { flex: none; color: var(--verde); }
+.sincaviso--girando .sincaviso__roda { animation: rodar 1s linear infinite; }
+
+@keyframes rodar { to { transform: rotate(360deg); } }
+
+.sincaviso--erro { color: var(--ambar); }
+.sincaviso--pronto .sincaviso__roda { color: var(--verde); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sincaviso--girando .sincaviso__roda { animation: none; }
+}
+
+/* Aviso dentro de um campo: o mesmo tom das dicas, mas com uma barra
+   ao lado para não se perder no meio do texto de ajuda. */
+.campo__dica--atencao {
+  border-left: 3px solid var(--ambar);
+  padding-left: 10px;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+/* ---------- Crescimento da planta ---------- */
+
+/* Entra depois da rega, quando a sequência cruza para um estágio novo:
+   o desenho troca e dá um empurrão de escala, com estrelinhas em volta. */
+
+.planta__vaso--crescendo { animation: planta-cresce 1.1s cubic-bezier(.2, 1.4, .4, 1); }
+
+@keyframes planta-cresce {
+  0%   { transform: scale(.82); }
+  55%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+.planta .planta__folhagem.folhagem--crescendo {
+  animation: folhagem-abre 1.1s cubic-bezier(.2, 1.3, .4, 1);
+}
+
+@keyframes folhagem-abre {
+  0%   { transform: scale(.7) translateY(6px); opacity: .5; }
+  60%  { transform: scale(1.08) translateY(0); opacity: 1; }
+  100% { transform: scale(1) translateY(0); }
+}
+
+/* ---------- Escudo de sequência ---------- */
+
+.escudo__corpo {
+  fill: var(--verde-claro);
+  stroke: var(--verde);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.escudo__brilho { fill: var(--verde); opacity: .12; }
+
+.escudo__rachadura {
+  fill: none;
+  stroke: var(--verde);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  opacity: .8;
+}
+
+/* Nasce girando e encolhendo até assentar em volta do vaso. */
+.escudo--formando {
+  transform-origin: 50% 50%;
+  animation: escudoNasce .9s cubic-bezier(.2, .9, .25, 1.05) both;
+}
+
+@keyframes escudoNasce {
+  0%   { opacity: 0; transform: scale(1.7) rotate(-14deg); }
+  55%  { opacity: 1; }
+  100% { opacity: .92; transform: scale(1) rotate(0); }
+}
+
+/* As duas metades se afastam e caem. */
+.escudo--partiu .escudo__caco--esq {
+  animation: cacoEsquerdo .95s ease-in both;
+}
+
+.escudo--partiu .escudo__caco--dir {
+  animation: cacoDireito .95s ease-in both;
+}
+
+.escudo--partiu .escudo__rachadura {
+  animation: rachaduraSome .3s ease-out both;
+}
+
+@keyframes cacoEsquerdo {
+  0%   { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(-16px, 26px) rotate(-24deg); opacity: 0; }
+}
+
+@keyframes cacoDireito {
+  0%   { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(16px, 26px) rotate(24deg); opacity: 0; }
+}
+
+@keyframes rachaduraSome {
+  0%   { opacity: .9; }
+  100% { opacity: 0; }
+}
+
+/* O quadro dos escudos, na tela de recompensas. */
+.escudos-painel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--fundo-suave);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.escudos-painel__selos { display: flex; gap: 5px; }
+
+.escudos-painel__estado {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--texto-suave);
+}
+
+.escudo-selo .escudo-mini { width: 20px; height: 20px; }
+.escudo-selo .escudo-mini path { fill: var(--verde); }
+.escudo-selo--vazio .escudo-mini path { fill: var(--borda); }
+
+/* Os selinhos no cartão da planta. */
+.planta__escudos {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.escudo-mini {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.escudo-mini path { fill: var(--verde); }
+
+.planta__escudo--vazio .escudo-mini path { fill: var(--borda); }
+
+.brilho__estrela {
+  fill: var(--ambar, #ffc94a);
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: estrela-pisca 1.5s ease-out;
+}
+
+@keyframes estrela-pisca {
+  0%   { opacity: 0; transform: scale(.2) rotate(-25deg); }
+  35%  { opacity: 1; transform: scale(1.15) rotate(0deg); }
+  70%  { opacity: .85; transform: scale(.95) translateY(-4px); }
+  100% { opacity: 0; transform: scale(.5) translateY(-12px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planta__vaso--crescendo,
+  .planta .planta__folhagem.folhagem--crescendo,
+  .escudo--formando,
+  .escudo--partiu .escudo__caco--esq,
+  .escudo--partiu .escudo__caco--dir,
+  .brilho__estrela { animation: none !important; }
+  .brilho { display: none; }
+}
+
+/* ---------- Histórico das plantas ---------- */
+
+/* Uma linha por ciclo, da mais nova para a mais velha. Tudo é
+   derivado do log de acessos — não há dado guardado só para isto. */
+
+.historico {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historico__linha {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--fundo-suave);
+}
+
+.historico__linha--atual {
+  border-color: var(--verde);
+  background: var(--verde-claro);
+}
+
+.historico__emoji { font-size: 19px; line-height: 1.2; flex: none; }
+.historico__texto { min-width: 0; }
+
+.historico__titulo {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--texto);
+}
+
+.historico__periodo {
+  font-weight: 400;
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+}
+
+.historico__detalhe {
+  font-size: 12px;
+  color: var(--texto-suave);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+.historico__viva { color: var(--verde); font-weight: 650; }
+.historico__morta { color: var(--vermelho); }
+
+/* ---------- Semana e calendário da planta ---------- */
+
+.semana { margin-bottom: 14px; }
+
+.semana__titulo {
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: 6px;
+}
+
+.semana__fita {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.semana__dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 2px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--fundo-suave);
+}
+
+.semana__dia--acesso { border-color: var(--verde); background: var(--verde-claro); }
+.semana__dia--hoje { outline: 2px solid var(--verde); outline-offset: 1px; }
+
+.semana__inicial { font-size: 10px; color: var(--texto-fraco); }
+.semana__planta { font-size: 16px; line-height: 1.1; }
+.semana__numero { font-size: 11px; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+
+.calendario {
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 14px;
+  background: var(--fundo-cartao);
+}
+
+.calendario__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.calendario__nome { font-size: 13.5px; font-weight: 650; }
+
+.calendario__seta {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-suave);
+  color: var(--texto-suave);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.calendario__seta:hover { background: var(--verde-claro); color: var(--verde); }
+
+.calendario__semana,
+.calendario__grade {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.calendario__semana {
+  margin-bottom: 4px;
+  font-size: 10px;
+  color: var(--texto-fraco);
+  text-align: center;
+}
+
+.dia {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--fundo-suave);
+  min-height: 34px;
+}
+
+.dia--fora { opacity: .28; }
+.dia--acesso { background: var(--verde-claro); }
+.dia--renasceu { outline: 1px dashed var(--ambar); }
+.dia--hoje { outline: 2px solid var(--verde); outline-offset: -1px; }
+
+.dia__numero { font-size: 10px; color: var(--texto-fraco); font-variant-numeric: tabular-nums; }
+.dia__planta { font-size: 14px; line-height: 1.1; min-height: 16px; }
+
+.calendario__rodape {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  text-align: center;
+}
+
+/* O rótulo da versão vira botão quando há atualização esperando no
+   celular — o Android nunca instala sem perguntar, então precisa de
+   algo para tocar. */
+.campo__dica--toque {
+  cursor: pointer;
+  text-decoration: underline;
+  font-weight: 600;
+}

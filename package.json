@@ -1,0 +1,49 @@
+{
+  "name": "controle-financeiro",
+  "version": "0.1.0",
+  "description": "Controle Financeiro pessoal — portátil, com dados no pendrive",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "servir": "python3 -m http.server 8123 --directory .",
+    "dist": "electron-builder --linux --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "br.thiago.controlefinanceiro",
+    "productName": "Controle Financeiro",
+    "asar": false,
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "build-assets/icone-256.png",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "build-assets/icone.png"
+    },
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "signAndEditExecutable": false,
+      "icon": "build-assets/icone.ico"
+    }
+  },
+  "author": {
+    "name": "Thiago"
+  }
+}

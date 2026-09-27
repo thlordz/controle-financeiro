@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- updatePeriodMillis tem piso de 30 min no Android: é a ronda que
+     faz o widget virar "Entre hoje!" sozinho depois da meia-noite.
+     A atualização imediata, quando a pessoa usa o app, vem do
+     WidgetPlugin. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="40dp"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_planta"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_descricao" />

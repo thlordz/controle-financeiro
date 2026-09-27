@@ -1,0 +1,59 @@
+# ==================================================================
+# O que NUNCA sobe para o GitHub.
+#
+# O histórico do Git é para sempre: um arquivo que sobe uma vez fica
+# gravado mesmo depois de apagado. Por isso esta lista existe antes
+# do primeiro commit, e não depois.
+#
+# Atenção ao escrever aqui: o Git só entende "#" como comentário
+# quando ele abre a linha. Comentário no fim da linha vira parte do
+# padrão e o padrão para de valer, em silêncio.
+# ==================================================================
+
+# --- Segredos e dados pessoais ---
+# O arquivo financeiro de verdade, a chave que assina o Android e a
+# senha dela. Se a chave vazar, qualquer um assina uma atualização
+# falsa que o celular aceita como sendo nossa.
+dados/
+preferencias.json
+comprovantes/
+*.jks
+*.keystore
+movel/chave/
+movel/android/local.properties
+
+# --- O token carimbado na hora de empacotar ---
+app/token-leitura.txt
+
+# --- Pacotes prontos (vão nas Releases, não no repositório) ---
+build/
+entrega/
+pendrive/
+pendrive.zip
+*.AppImage
+*.apk
+*.apk.idsig
+*.exe
+
+# --- Dependências (voltam com `npm install`) ---
+node_modules/
+
+# --- Sobras da compilação do Android (voltam com `cap sync`) ---
+movel/android/.gradle/
+movel/android/build/
+movel/android/app/build/
+movel/android/capacitor-cordova-android-plugins/
+movel/android/app/capacitor.build.gradle
+movel/android/app/src/main/assets/public/
+movel/android/app/src/main/assets/capacitor.config.json
+movel/android/app/src/main/assets/capacitor.plugins.json
+
+# --- Backups antigos que ficaram pela pasta ---
+.antes-da-fusao/
+.base-da-fusao/
+.backup-*/
+.redesenho-recuperado/
+.publicado.sha256
+
+# --- Cache local dos anexos já enviados ao GitHub ---
+ferramentas/.github-anexos.json

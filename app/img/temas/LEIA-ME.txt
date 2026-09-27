@@ -1,0 +1,124 @@
+================================================================
+ARTE DOS TEMAS — o que colocar em cada pasta
+================================================================
+
+Aqui vão PEÇAS SOLTAS, nunca um papel de parede pronto. O app monta
+o mosaico na hora — é assim que ele se adapta a qualquer tela sem
+você precisar gerar uma imagem por resolução.
+
+São dois tipos de arquivo por tema:
+
+  app/img/temas/<tema>/elementos/     6 arquivos SVG
+  app/img/temas/<tema>/personagem.png 1 imagem
+
+Um tema sem nada continua com o desenho vetorial de hoje. Dá para
+misturar: alguns temas com figura, outros no traço.
+
+
+----------------------------------------------------------------
+1. ELEMENTOS — 6 por tema, em SVG
+----------------------------------------------------------------
+São os objetos que se repetem no fundo, espalhados numa grade solta.
+
+  quantidade  6 por tema. A grade é 4x4, então cada um aparece 2 ou
+              3 vezes. Menos que 6 e a repetição fica óbvia.
+  traço       só contorno, sem preenchimento.
+  cor         NENHUMA. `fill`, `stroke` e `style` são removidos na
+              hora de empacotar — quem pinta é a paleta do tema.
+  viewBox     QUALQUER UM. O app reencaixa o desenho numa caixa de
+              100x100 sozinho.
+  espessura   não se preocupe, é normalizada.
+  conteúdo    um objeto reconhecível por arquivo, desenho simples e
+              fechado.
+  proibido    <text>, <image>, filtros, máscaras e gradientes. Não
+              sobrevivem à normalização.
+
+NÃO PRECISA PREPARAR O ARQUIVO. Baixe como vier — com cor, com
+viewBox de 512, com grupos aninhados. Se algum não passar, o
+empacotador diz qual e por quê, em vez de aparecer quebrado no app.
+
+Exemplo para Rick and Morty: portal, arma de portal, o carro, a
+nave, o frasco de soro, o cubo da Cidadela.
+
+
+----------------------------------------------------------------
+2. PERSONAGEM — 1 por tema, imagem
+----------------------------------------------------------------
+  formato   PNG com fundo TRANSPARENTE. WEBP também serve.
+            JPG NÃO: ele não guarda transparência e entra com um
+            retângulo branco atrás.
+  tamanho   800 px no lado maior.
+  proporção mais alto que largo, entre 1:1,4 e 1:2.
+  recorte   colado no personagem. Sem moldura, sem legenda, sem
+            sombra "assada" na imagem, sem margem sobrando.
+  peso      até ~200 KB. O empacotador converte e reduz.
+
+Por que 800 px: no computador ele aparece com no máximo 320 px, e
+numa tela de densidade dupla isso são 640 px reais; no celular
+aparece com ~220 px, e numa tela de densidade tripla são 660 px
+reais. Com 800 nunca sai borrado, e o que sobra o build corta.
+
+
+----------------------------------------------------------------
+3. ONDE O PERSONAGEM APARECE
+----------------------------------------------------------------
+O conteúdo do app é uma coluna de 940 px centralizada. Numa tela
+grande sobra margem vazia dos dois lados, e é ali que ele fica —
+sem nunca encostar nos cartões.
+
+    largura da janela   margem de cada lado   personagem
+    1920                490 px                320 px (teto)
+    1600                330 px                306 px
+    1440                250 px                226 px
+    1366                213 px                189 px
+    1280                170 px                146 px
+    abaixo de ~1240     -                     desce para o fim
+                                              da tela inicial
+
+No computador ele fica fixo no canto direito, alinhado por baixo.
+Quando a janela aperta e a margem some, ele vira um bloco normal no
+fim da tela inicial: rolou até o fundo, ele está lá. No celular
+aparece com min(260px, 60vw) — uns 216 px num aparelho de 360 px.
+
+
+----------------------------------------------------------------
+4. PESO TOTAL
+----------------------------------------------------------------
+Como os elementos são SVG (3 KB cada) e só o personagem é imagem,
+os 17 temas inteiros dão cerca de 1,4 MB. Dá para fazer todos sem
+inchar o APK.
+
+
+----------------------------------------------------------------
+5. PASTAS
+----------------------------------------------------------------
+  portal/        Rick e Morty
+  meeseeks/      Mr. Meeseeks
+  pickle/        Pickle Rick
+  cronenberg/    Cronenbergs
+  federacao/     Federação Galáctica
+  cidadela/      Cidadela dos Ricks
+  homemDeFerro/  Homem de Ferro
+  hulk/          Hulk
+  capitao/       Capitão América
+  wakanda/       Pantera Negra
+  estranho/      Doutor Estranho
+  asgard/        Thor
+  manopla/       Thanos
+  neon/          (livre)
+  terminal/      (livre)
+  nebulosa/      (livre)
+  masmorra/      (livre)
+  arcade/        (livre)
+
+O nome do arquivo não importa; a ordem é alfabética.
+
+
+----------------------------------------------------------------
+6. FALTA DECIDIR
+----------------------------------------------------------------
+O personagem entra em cor cheia ou desbotado? Ele fica na margem
+vazia, longe do texto, então dá para deixar 100% opaco e virar um
+personagem de verdade na tela — diferente do papel de parede, que
+precisa sumir. Sugestão: cor cheia no computador, ~85% no celular.
+Só dá para calibrar vendo as primeiras imagens.
