@@ -57,3 +57,6 @@ movel/android/app/src/main/assets/capacitor.plugins.json
 
 # --- Cache local dos anexos já enviados ao GitHub ---
 ferramentas/.github-anexos.json
+
+# Protótipo do redesenho (rascunho, não faz parte do app)
+desenho/

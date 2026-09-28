@@ -1,6 +1,6 @@
 {
   "name": "controle-financeiro",
-  "version": "0.1.0",
+  "version": "3.1.0",
   "description": "Controle Financeiro pessoal — portátil, com dados no pendrive",
   "main": "electron/main.js",
   "private": true,
@@ -30,10 +30,14 @@
     ],
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "category": "Office",
-      "icon": "build-assets/icone.png"
+      "icon": "build-assets/icone.png",
+      "maintainer": "Thiago <thlordz@users.noreply.github.com>",
+      "synopsis": "Controle financeiro pessoal",
+      "description": "Versão em aplicativo da planilha de controle financeiro."
     },
     "win": {
       "target": [

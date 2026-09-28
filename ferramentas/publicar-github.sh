@@ -81,8 +81,12 @@ if [ -d "build/win-unpacked/resources/app" ]; then
     | gzip -n -9 > "$TAR_WINDOWS"
 fi
 
+APPIMAGE_ACHADO="$(ls -1t build/*.AppImage 2>/dev/null | head -1)"
+DEB_ACHADO="$(ls -1t build/*.deb 2>/dev/null | head -1)"
+
 PACOTES=(
-  "linux|build/Controle Financeiro-0.1.0.AppImage|Controle-Financeiro.AppImage"
+  "linux|${APPIMAGE_ACHADO:-build/nao-existe}|Controle-Financeiro.AppImage"
+  "linux|${DEB_ACHADO:-build/nao-existe}|controle-financeiro.deb"
   "windows|$TAR_WINDOWS|app.tar.gz"
   "windows|build/win-unpacked/Controle Financeiro.exe|Controle-Financeiro.exe"
   "android|movel/Controle Financeiro.apk|Controle-Financeiro.apk"

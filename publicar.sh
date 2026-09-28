@@ -90,7 +90,11 @@ trocar_app_windows() {
   cp "build/win-unpacked/Controle Financeiro.exe" "$destino/Controle Financeiro.exe"
 }
 
-APPIMAGE="build/Controle Financeiro-0.1.0.AppImage"
+# O nome do AppImage carrega a versão, então procuramos em vez de
+# escrever à mão: assim mudar a versão não quebra a publicação.
+APPIMAGE="$(ls -1t build/*.AppImage 2>/dev/null | head -1)"
+[ -n "$APPIMAGE" ] || { echo "Não achei o AppImage em build/"; exit 1; }
+DEB="$(ls -1t build/*.deb 2>/dev/null | head -1)"
 
 # Espelho local, com a mesma cara que o pendrive tinha.
 cp "$APPIMAGE" "pendrive/Controle Financeiro.AppImage"
