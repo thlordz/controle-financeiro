@@ -39,6 +39,7 @@ async function comACaixa(modo, fn) {
 /** Guarda o arquivo escolhido. Devolve o tipo ('video' ou 'imagem'). */
 export async function guardarMidia(arquivo) {
   const tipo = arquivo.type.startsWith('video/') ? 'video' : 'imagem';
+  soltarEndereco();
   await comACaixa('readwrite', (caixa) => caixa.put(arquivo, 'atual'));
   return { tipo, nome: arquivo.name, tamanho: arquivo.size };
 }
@@ -50,23 +51,37 @@ export async function guardarMidia(arquivo) {
  * trocar de arquivo.
  */
 let enderecoAtual = '';
+let tipoAtual = '';
+
 export async function lerMidia() {
+  // O endereço é criado UMA vez e reaproveitado. Antes ele era
+  // recriado a cada leitura, revogando o anterior — e como o fundo e
+  // a prévia leem em sequência, a segunda leitura derrubava o vídeo
+  // que a primeira tinha acabado de pôr na tela.
+  if (enderecoAtual) return { url: enderecoAtual, tipo: tipoAtual };
   try {
     const blob = await comACaixa('readonly', (caixa) => caixa.get('atual'));
     if (!blob) return null;
-    if (enderecoAtual) URL.revokeObjectURL(enderecoAtual);
     enderecoAtual = URL.createObjectURL(blob);
-    return { url: enderecoAtual, tipo: blob.type.startsWith('video/') ? 'video' : 'imagem' };
+    tipoAtual = blob.type.startsWith('video/') ? 'video' : 'imagem';
+    return { url: enderecoAtual, tipo: tipoAtual };
   } catch (e) {
     console.warn('Fundo:', e?.message || e);
     return null;
   }
 }
 
+/** Solta o endereço guardado. Usado ao trocar ou tirar o arquivo. */
+function soltarEndereco() {
+  if (enderecoAtual) URL.revokeObjectURL(enderecoAtual);
+  enderecoAtual = '';
+  tipoAtual = '';
+}
+
 export async function apagarMidia() {
   try {
     await comACaixa('readwrite', (caixa) => caixa.delete('atual'));
-    if (enderecoAtual) { URL.revokeObjectURL(enderecoAtual); enderecoAtual = ''; }
+    soltarEndereco();
   } catch { /* paciência */ }
 }
 

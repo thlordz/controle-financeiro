@@ -14,11 +14,15 @@
 import { calcularPainel, statusDevedor as statusDevedorReal } from './calculos.js';
 import {
   diasDaSequencia, inicioDoCiclo, calcularSequencia, estagioCrescendo,
+  escudosDisponiveis, DIAS_POR_ESCUDO, MAX_ESCUDOS, DIAS_ATE_MORRER,
 } from './planta.js';
-import { svgDaPlanta } from './plantaSvg.js';
+import { svgDaPlanta, svgDoEscudoMini } from './plantaSvg.js';
 import { novoId, carimbar, agora } from './dominio.js';
 import { hoje, paraISO, formatarData } from './util.js';
 import { VERSAO } from './versao.js';
+import {
+  lerConfiguracao, gravarConfiguracao, limparConfiguracao, estaLigada,
+} from './sincronia.js';
 import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 
 /** Chamado toda vez que a tela mexe nos dados. Ligado em app.js. */
@@ -962,6 +966,7 @@ function telaPlanta() {
       <div class="planta-palco__estagio">${estagio(seq.dias)}</div>
       <div class="planta-palco__dias">${seq.dias} dias seguidos · última visita ${bonito(seq.ultimo)}</div>
     </div>
+    ${blocoDeEscudos()}
     ${barraMesCelular()}
     <div class="calendario">
       ${['D','S','T','Q','Q','S','S'].map((l)=>`<div style="font-size:11px;color:var(--apagado);text-align:center">${l}</div>`).join('')}
@@ -993,7 +998,9 @@ function resumoDaSecao(chave) {
     voce: seuNome(),
     aparencia: `${TEMAS[temaEscolhido()].nome} · ${CORES[visual.cor].nome.toLowerCase()} · ${FUNDOS[visual.fundo].nome.toLowerCase()}`,
     lembrete: lembrete.ligado ? `Todo dia às ${lembrete.hora}` : 'Desligado',
-    planta: estado.planta ? `${sequencia().dias} dias seguidos` : 'Desligada',
+    planta: estado.planta
+      ? `${sequencia().dias} dias seguidos · ${escudosDisponiveis(D)} de ${MAX_ESCUDOS} escudos`
+      : 'Desligada',
     banco: c && c.ligado ? 'Ligado' : 'Só neste aparelho',
     backup: 'Guardar ou trazer de volta',
     sobre: `Versão 3.1`,
@@ -1006,6 +1013,63 @@ function irNoAjuste(secao) {
   history.pushState({ dentro: true }, '');
   desenhar();
   window.scrollTo({ top: 0 });
+}
+
+/**
+ * Os escudos.
+ *
+ * Eles são o perdão da sequência: cada dez dias seguidos rendem um, e
+ * um escudo cobre um dia que você deixou passar. Sem isso, esquecer
+ * uma vez depois de dois meses jogava tudo fora, e a pessoa
+ * simplesmente desistia.
+ *
+ * Quem conta é o `planta.js`; aqui só mostramos.
+ */
+function blocoDeEscudos() {
+  const tem = escudosDisponiveis(D);
+  const seq = sequencia().dias;
+  const faltam = DIAS_POR_ESCUDO - (seq % DIAS_POR_ESCUDO);
+  const cheio = tem >= MAX_ESCUDOS;
+
+  const pinos = Array.from({ length: MAX_ESCUDOS }, (_, i) => `
+    <span class="escudo ${i < tem ? '' : 'escudo--vazio'}">${svgDoEscudoMini()}</span>`).join('');
+
+  return `<button class="cartao" onclick="explicarEscudos()" style="margin-bottom:12px">
+    <span class="escudos">${pinos}</span>
+    <span class="cartao__meio">
+      <div class="chave__nome">${tem === 0 ? 'Nenhum escudo ainda'
+        : tem === 1 ? 'Um escudo guardado' : `${tem} escudos guardados`}</div>
+      <div class="chave__sub">${cheio
+        ? 'Cheio! Mais que três eu não guardo.'
+        : `Faltam ${faltam} ${faltam === 1 ? 'dia' : 'dias'} para o próximo`}</div>
+    </span>
+    <span class="cartao__acao">${icone('ajuda',16)}</span>
+  </button>`;
+}
+
+function explicarEscudos() {
+  const tem = escudosDisponiveis(D);
+  mostrarFolha(`
+    <div class="folha__titulo">Os escudos</div>
+    <p class="explica">
+      Escudo é o seu perdão. Se você esquecer de passar aqui um dia, ele
+      cobre o buraco e a sua sequência continua de pé, como se nada tivesse
+      acontecido.
+    </p>
+    <div class="conta">
+      ${linhaDaConta(`A cada ${DIAS_POR_ESCUDO} dias seguidos`, 1, '+')}
+      ${linhaDaConta('Cada dia esquecido gasta', 1, '−')}
+      ${linhaDaConta('Mais do que isso eu não guardo', MAX_ESCUDOS, '', true)}
+    </div>
+    <p class="explica">
+      Você tem <b>${tem === 0 ? 'nenhum' : tem}</b> agora.
+    </p>
+    <p class="explica explica--fraco">
+      Eles não são infinitos de propósito: com escudo demais a sequência
+      perderia a graça. E se você sumir por mais de ${DIAS_ATE_MORRER} dias, a
+      planta morre e os escudos vão junto. Aí é recomeçar do zero mesmo.
+    </p>
+    <button class="principal" onclick="fecharFolha()">Entendi!</button>`);
 }
 
 function telaAjustes() {
@@ -1091,7 +1155,7 @@ function secaoDeAjuste(chave) {
           <div class="chave__sub">${ligado ? escapar(c.url) : 'Seus dados não saem daqui'}</div>
         </span>
       </div>
-      <button class="cartao" style="margin-top:10px" onclick="mostrarEntrada()">
+      <button class="cartao" style="margin-top:10px" onclick="trocarDeBanco()">
         <span class="pastilha pastilha--menta">${icone('engrenagem')}</span>
         <span class="cartao__meio">
           <div class="chave__nome">${ligado ? 'Trocar de banco' : 'Ligar um banco'}</div>
@@ -1806,10 +1870,21 @@ function ligarMascaras(onde) {
    que é de graça no Turso. A tela conta isso na lata em vez de fingir
    que existe uma conta nossa.
    =================================================================== */
-const CHAVE_CONEXAO = 'cf:conexao';
-
+/**
+ * Quem responde se o banco está ligado é o próprio módulo de
+ * sincronia: é ele que guarda endereço e token, e é ele que sobe e
+ * baixa. Esta tela só pergunta e escreve lá.
+ *
+ * O "só neste aparelho" é uma escolha explícita, guardada à parte,
+ * para a tela de conexão não voltar a aparecer toda abertura para
+ * quem já disse que não quer banco nenhum.
+ */
 function conexaoGuardada() {
-  try { return JSON.parse(localStorage.getItem(CHAVE_CONEXAO) || 'null'); } catch { return null; }
+  if (estaLigada()) {
+    const c = lerConfiguracao();
+    return { ligado: true, url: c.url };
+  }
+  return lerGuardado('cf:soAqui', false) ? { local: true } : null;
 }
 
 function mostrarEntrada() {
@@ -1865,6 +1940,21 @@ function mostrarEntrada() {
 
 function esconderEntrada() { $('entrada').hidden = true; }
 
+/** `libsql://` é o mesmo endereço em `https://`. O painel do Turso
+ *  mostra o primeiro, e ninguém precisa saber disso. */
+function normalizarEndereco(url) {
+  let t = String(url || '').trim().replace(/\/+$/, '');
+  if (t.startsWith('libsql://')) t = 'https://' + t.slice('libsql://'.length);
+  if (t && !/^https?:\/\//.test(t)) t = 'https://' + t;
+  return t;
+}
+
+function trocarDeBanco() {
+  limparConfiguracao();
+  guardar('cf:soAqui', false);
+  mostrarEntrada();
+}
+
 function conectar() {
   const nome = pegar('con-nome').trim();
   if (nome) guardar('cf:nome', nome.slice(0, 24));
@@ -1872,16 +1962,15 @@ function conectar() {
   const token = pegar('con-token').trim();
   if (!url) { avisar('Falta o endereço do banco'); return; }
   if (!token) { avisar('Falta o token'); return; }
-  try {
-    localStorage.setItem(CHAVE_CONEXAO, JSON.stringify({ url, ligado: true }));
-  } catch { /* paciência */ }
+  gravarConfiguracao({ url: normalizarEndereco(url), token, em: '' });
+  guardar('cf:soAqui', false);
   perguntarDoBackup();
 }
 
 function usarSoNesteAparelho() {
   const nome = pegar('con-nome').trim();
   if (nome) guardar('cf:nome', nome.slice(0, 24));
-  try { localStorage.setItem(CHAVE_CONEXAO, JSON.stringify({ local: true })); } catch { /* paciência */ }
+  guardar('cf:soAqui', true);
   esconderEntrada();
   desenhar();
   avisar('Beleza, fica só aqui então');
@@ -2131,7 +2220,8 @@ function apagarTudoMesmo() {
   D.investimento.length = 0;
   D.logAcesso.length = 0;
   D.config.ajusteSaldo = 0;
-  try { localStorage.removeItem(CHAVE_CONEXAO); } catch { /* paciência */ }
+  limparConfiguracao();
+  guardar('cf:soAqui', false);
   estado.escolhido = null;
   estado.selecao.clear();
   fecharFolha();
@@ -2292,6 +2382,13 @@ function aplicarFundo() {
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           v.autoplay = false; v.pause();
         }
+        // Nem todo aparelho decodifica todo vídeo. Um arquivo só de
+        // áudio, ou num formato que o aparelho não abre, carregaria
+        // em silêncio e deixaria a tela preta sem explicação.
+        v.addEventListener('error', () => reclamarDoVideo('Esse vídeo eu não consigo abrir aqui'));
+        v.addEventListener('loadeddata', () => {
+          if (!v.videoWidth) reclamarDoVideo('Esse arquivo não tem imagem, só som');
+        });
         papel.appendChild(v);
       } else {
         papel.style.backgroundImage = `url(${m.url})`;
@@ -2330,6 +2427,21 @@ function aplicarFundo() {
   // O véu escurece a foto e nada mais. Antes ele vinha amarrado à
   // transparência dos cartões, e mexer num mexia no outro sem motivo.
   $('veu').style.opacity = TEM_ARQUIVO.includes(visual.fundo) ? (100 - visual.brilho) / 100 : 0;
+}
+
+/**
+ * Quando o vídeo não serve, voltamos para o fundo liso e dizemos por
+ * quê. Deixar a tela preta sem explicação seria pior.
+ */
+let jaReclamou = false;
+function reclamarDoVideo(motivo) {
+  if (jaReclamou) return;
+  jaReclamou = true;
+  avisar(motivo);
+  visual.fundo = 'nenhum';
+  guardarVisual();
+  aplicarFundo();
+  setTimeout(() => { jaReclamou = false; }, 3000);
 }
 
 function aplicarVisual() { aplicarCor(); aplicarFundo(); }
@@ -2680,10 +2792,12 @@ Object.assign(window, {
   listaInvestimento, painel, sequencia, estagio, chaveDoEstagio,
   temaEscolhido, fonteEscolhida, aplicarVisual, restaurarBackup,
   estado, visual, guardarVisual, preencherAmostrasDeArquivo,
+  conexaoGuardada, mostrarEntrada, esconderEntrada, normalizarEndereco,
+  explicarEscudos, blocoDeEscudos,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
-  escolherArquivoDeBackup, escolherArquivoDeFundo, excluir, excluirDevedor, explicarSaldo, explicarSobra,
+  escolherArquivoDeBackup, escolherArquivoDeFundo, trocarDeBanco, excluir, excluirDevedor, explicarSaldo, explicarSobra,
   fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
   mudarCor, mudarDesfoque, mudarFundo, mudarHoraDoLembrete, mudarLembrete, mudarMes,
