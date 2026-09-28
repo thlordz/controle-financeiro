@@ -43,8 +43,8 @@ def primeiro_plano(conteudo, lado):
 
 
 def gerar(res):
-    quadrado = desenhar(False)
-    conteudo = desenhar(False, com_fundo=False)
+    quadrado = desenhar()
+    conteudo = desenhar(fundo=False, margem=0.16)
 
     for nome, fator in DENSIDADES.items():
         pasta = os.path.join(res, f'mipmap-{nome}')
