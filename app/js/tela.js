@@ -19,6 +19,7 @@ import { svgDaPlanta } from './plantaSvg.js';
 import { novoId, carimbar, agora } from './dominio.js';
 import { hoje, paraISO, formatarData } from './util.js';
 import { VERSAO } from './versao.js';
+import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 
 /** Chamado toda vez que a tela mexe nos dados. Ligado em app.js. */
 let aoMexer = () => {};
@@ -78,6 +79,7 @@ function icone(nome, tamanho = 21) {
     parcela:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M9 15h6"/>',
     check:'<path d="M4.5 12.6 9.4 17.5 19.5 7.2"/>',
     sino:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+    filme:'<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M7 5v14M17 5v14M2.5 12h19M2.5 8.5h4.5M2.5 15.5h4.5M17 8.5h4.5M17 15.5h4.5"/>',
     fogo:'<path d="M12 22c4 0 6.5-2.6 6.5-6 0-4.5-4.5-6-4-11-2.5 1.5-4 4-4 6.5 0 1.5-1 2-1.5 1.5-1-1-1-2.5-1-2.5S5.5 12 5.5 16c0 3.4 2.5 6 6.5 6Z"/>',
     sol:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>',
     lua:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
@@ -213,6 +215,7 @@ function desenhar() {
 
   const semBotao = ['inicio','ajustes','planta'].includes(estado.tela);
   $('fab').style.display = semBotao ? 'none' : '';
+  preencherAmostrasDeArquivo();
   $('fab').lastChild.textContent = ({
     despesas: ' Nova despesa',
     receitas: ' Nova receita',
@@ -2227,16 +2230,24 @@ const FUNDOS = {
   ondas:        { nome: 'Ondas',         tipo:'padrao' },
   bolhas:       { nome: 'Bolhas subindo', tipo:'animado' },
   aurora:       { nome: 'Aurora',        tipo:'animado' },
-  foto:         { nome: 'Sua foto',      tipo:'foto' },
+  foto:         { nome: 'Sua foto',      tipo:'arquivo' },
+  gif:          { nome: 'Seu GIF',       tipo:'arquivo' },
+  video:        { nome: 'Seu vídeo',     tipo:'arquivo' },
 };
+
+/* Os três últimos são a mesma coisa por dentro: um arquivo que a
+   pessoa escolheu. O que muda é o que o app aceita e como desenha. */
+const ACEITA = { foto: 'image/*', gif: 'image/gif', video: 'video/*' };
+const TEM_ARQUIVO = ['foto', 'gif', 'video'];
 
 const visual = {
   cor: 'amarelo',
   fundo: 'nenhum',
   desfoque: 8,
   opacidade: 86,
-  brilho: 100,   // só vale para a foto
+  brilho: 100,   // vale para foto, gif e vídeo
   foto: '',
+  midia: null,   // { tipo, nome, tamanho } do arquivo guardado
 };
 
 function lerVisual() {
@@ -2266,8 +2277,26 @@ function aplicarFundo() {
   papel.innerHTML = '';
   papel.style.backgroundImage = '';
 
-  if (visual.fundo === 'foto' && visual.foto) {
-    papel.style.backgroundImage = `url(${visual.foto})`;
+  if (TEM_ARQUIVO.includes(visual.fundo)) {
+    // O arquivo mora no IndexedDB, então a leitura é assíncrona: o
+    // fundo entra um instante depois do resto, e tudo bem.
+    lerMidia().then((m) => {
+      if (!m || !TEM_ARQUIVO.includes(visual.fundo)) return;
+      if (m.tipo === 'video') {
+        const v = document.createElement('video');
+        v.src = m.url;
+        v.autoplay = true; v.loop = true; v.playsInline = true;
+        v.muted = true;            // vídeo de fundo com som seria um pesadelo
+        v.setAttribute('muted', '');
+        v.className = 'papel__video';
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          v.autoplay = false; v.pause();
+        }
+        papel.appendChild(v);
+      } else {
+        papel.style.backgroundImage = `url(${m.url})`;
+      }
+    });
   }
   if (visual.fundo === 'bolhas') {
     for (let i = 0; i < 14; i++) {
@@ -2300,40 +2329,61 @@ function aplicarFundo() {
   r.setProperty('--opacidade-modal', temFundo ? Math.min(100, visual.opacidade + 12) + '%' : '100%');
   // O véu escurece a foto e nada mais. Antes ele vinha amarrado à
   // transparência dos cartões, e mexer num mexia no outro sem motivo.
-  $('veu').style.opacity = visual.fundo === 'foto' ? (100 - visual.brilho) / 100 : 0;
+  $('veu').style.opacity = TEM_ARQUIVO.includes(visual.fundo) ? (100 - visual.brilho) / 100 : 0;
 }
 
 function aplicarVisual() { aplicarCor(); aplicarFundo(); }
 
 function mudarCor(chave) { visual.cor = chave; guardarVisual(); aplicarVisual(); desenhar(); avisar('Cor trocada!'); }
 function mudarFundo(chave) {
-  if (chave === 'foto' && !visual.foto) { escolherFoto(); return; }
+  if (TEM_ARQUIVO.includes(chave) && !visual.midia) { escolherArquivoDeFundo(chave); return; }
   visual.fundo = chave; guardarVisual(); aplicarVisual(); desenhar();
 }
 function mudarDesfoque(v) { visual.desfoque = Number(v); guardarVisual(); aplicarFundo(); desenhar(); }
 function mudarOpacidade(v) { visual.opacidade = Number(v); guardarVisual(); aplicarFundo(); desenhar(); }
 function mudarBrilho(v) { visual.brilho = Number(v); guardarVisual(); aplicarFundo(); desenhar(); }
 
-function escolherFoto() {
+/**
+ * Escolher o arquivo de fundo: foto, GIF ou vídeo.
+ *
+ * O arquivo vai para o IndexedDB, não para o localStorage: um vídeo
+ * de poucos segundos já estoura o limite de lá, e virar texto ainda
+ * infla o tamanho em um terço.
+ */
+function escolherArquivoDeFundo(qual) {
   const campo = document.createElement('input');
   campo.type = 'file';
-  campo.accept = 'image/*';
-  campo.onchange = () => {
+  campo.accept = ACEITA[qual] || 'image/*';
+  campo.onchange = async () => {
     const arquivo = campo.files?.[0];
     if (!arquivo) return;
-    const leitor = new FileReader();
-    leitor.onload = () => {
-      visual.foto = leitor.result;
-      visual.fundo = 'foto';
+    if (arquivo.size > 120 * 1024 * 1024) {
+      avisar('Esse aí é grande demais, tenta um menor');
+      return;
+    }
+    try {
+      visual.midia = await guardarMidia(arquivo);
+      visual.fundo = visual.midia.tipo === 'video' ? 'video'
+                   : (arquivo.type === 'image/gif' ? 'gif' : 'foto');
+      visual.foto = '';
       guardarVisual(); aplicarVisual(); desenhar();
       avisar('Ficou bonito!');
-    };
-    leitor.readAsDataURL(arquivo);
+    } catch (e) {
+      avisar('Não consegui guardar esse arquivo');
+      console.warn(e);
+    }
   };
   campo.click();
 }
 
-function tirarFoto() { visual.foto = ''; visual.fundo = 'nenhum'; guardarVisual(); aplicarVisual(); desenhar(); }
+async function tirarFoto() {
+  await apagarMidia();
+  visual.midia = null;
+  visual.foto = '';
+  visual.fundo = 'nenhum';
+  guardarVisual(); aplicarVisual(); desenhar();
+  avisar('Tirei o fundo');
+}
 
 /** A tela de aparência inteira: claro/escuro, cor, fundo e fonte. */
 function conteudoDaAparencia() {
@@ -2369,17 +2419,21 @@ function conteudoDaAparencia() {
           <span class="fundo__nome">${f.nome}</span>
         </button>`).join('')}
     </div>
-    ${visual.foto ? `<div class="rodape-form" style="margin-top:0">
-      <button class="secundario" onclick="escolherFoto()">Trocar a foto</button>
+    ${visual.midia ? `<div class="rodape-form" style="margin-top:0">
+      <button class="secundario" onclick="escolherArquivoDeFundo('${visual.fundo}')">Trocar</button>
       <button class="apagar" onclick="tirarFoto()">Tirar</button>
-    </div>` : ''}
+    </div>
+    <p class="explica explica--fraco" style="margin-top:6px">
+      ${escapar(visual.midia.nome || 'arquivo')} · ${emTamanho(visual.midia.tamanho)}
+      ${visual.fundo === 'video' ? ' · sem som, como todo fundo deve ser' : ''}
+    </p>` : ''}
 
     ${temFundo ? `
       <div class="secao-form__nome">Como vai ficar</div>
       ${previaDoFundo()}
 
-      ${visual.fundo === 'foto' ? `
-        <div class="secao-form__nome">Brilho da foto</div>
+      ${TEM_ARQUIVO.includes(visual.fundo) ? `
+        <div class="secao-form__nome">Brilho do fundo</div>
         <div class="medidas">
           ${BRILHOS.map((b) => `
             <button class="medida ${b.valor===visual.brilho?'medida--ativa':''}"
@@ -2453,11 +2507,10 @@ const OPACIDADES = [
  * ter que sair da tela para conferir.
  */
 function previaDoFundo() {
-  const ehFoto = visual.fundo === 'foto' && visual.foto;
-  const veu = ehFoto ? (100 - visual.brilho) / 100 : 0;
+  const ehArquivo = TEM_ARQUIVO.includes(visual.fundo) && visual.midia;
+  const veu = ehArquivo ? (100 - visual.brilho) / 100 : 0;
   return `<div class="previa">
-    <span class="previa__papel papel--${visual.fundo}"
-      style="${ehFoto ? `background-image:url(${visual.foto})` : ''}">
+    <span class="previa__papel ${ehArquivo ? 'previa__papel--arquivo' : 'papel--' + visual.fundo}">
       ${visual.fundo === 'aurora'
         ? '<span style="position:absolute;left:5%;top:-20%;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--menta) 55%,transparent) 0%,transparent 70%)"></span>'
         : ''}
@@ -2501,18 +2554,46 @@ function previaDoFundo() {
   </div>`;
 }
 
+/**
+ * Preenche os lugares que mostram o arquivo de fundo (a prévia e a
+ * miniatura) assim que ele é lido do IndexedDB. Não dá para fazer
+ * isso na montagem do HTML porque a leitura é assíncrona.
+ */
+async function preencherAmostrasDeArquivo() {
+  if (!TEM_ARQUIVO.includes(visual.fundo)) return;
+  const m = await lerMidia();
+  if (!m) return;
+  for (const onde of document.querySelectorAll('.amostra-arquivo, .previa__papel--arquivo')) {
+    onde.innerHTML = '';
+    if (m.tipo === 'video') {
+      const v = document.createElement('video');
+      v.src = m.url; v.autoplay = true; v.loop = true; v.muted = true;
+      v.playsInline = true; v.setAttribute('muted', '');
+      v.className = 'papel__video';
+      onde.appendChild(v);
+    } else {
+      onde.style.backgroundImage = `url(${m.url})`;
+      onde.style.backgroundSize = 'cover';
+      onde.style.backgroundPosition = 'center';
+    }
+  }
+}
+
 /** Uma miniatura de cada fundo, desenhada com o próprio CSS dele. */
 function amostraDeFundo(chave) {
   if (chave === 'nenhum') return '';
-  if (chave === 'foto') {
-    return visual.foto
-      ? `<span style="position:absolute;inset:0;background:url(${visual.foto}) center/cover"></span>
-         <span style="position:absolute;inset:0;background:#000;opacity:${(100-visual.brilho)/100}"></span>`
-      : `<span style="position:absolute;inset:0;display:grid;place-items:center;gap:4px;
+  if (TEM_ARQUIVO.includes(chave)) {
+    const escolhido = visual.midia && visual.fundo === chave;
+    const rotulo = { foto: 'Escolher', gif: 'Escolher GIF', video: 'Escolher vídeo' }[chave];
+    if (!escolhido) {
+      return `<span style="position:absolute;inset:0;display:grid;place-items:center;gap:4px;
             align-content:center;color:var(--menta-frente);background:var(--menta-fundo)">
-           ${icone('mais',26)}
-           <span style="font-size:11.5px;font-weight:700">Escolher</span>
+           ${icone(chave === 'video' ? 'filme' : 'mais', 26)}
+           <span style="font-size:11px;font-weight:700">${rotulo}</span>
          </span>`;
+    }
+    return `<span class="amostra-arquivo" data-tipo="${chave}"></span>
+       <span style="position:absolute;inset:0;background:#000;opacity:${(100-visual.brilho)/100}"></span>`;
   }
   const bolinhas = chave === 'bolhas'
     ? '<span style="position:absolute;left:20%;bottom:10px;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--menta) 40%,transparent)"></span>' +
@@ -2598,10 +2679,11 @@ Object.assign(window, {
   abrirNovo, abrirMenuInvestir, abrirNovoDevedor, desenhar, redesenharLista,
   listaInvestimento, painel, sequencia, estagio, chaveDoEstagio,
   temaEscolhido, fonteEscolhida, aplicarVisual, restaurarBackup,
+  estado, visual, guardarVisual, preencherAmostrasDeArquivo,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
-  escolherArquivoDeBackup, escolherFoto, excluir, excluirDevedor, explicarSaldo, explicarSobra,
+  escolherArquivoDeBackup, escolherArquivoDeFundo, excluir, excluirDevedor, explicarSaldo, explicarSobra,
   fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
   mudarCor, mudarDesfoque, mudarFundo, mudarHoraDoLembrete, mudarLembrete, mudarMes,
