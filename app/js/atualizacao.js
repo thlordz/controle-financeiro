@@ -13,7 +13,15 @@
 import { VERSAO } from './versao.js';
 
 const REPO = 'thlordz/controle-financeiro';
-const ESPERA_ENTRE_BUSCAS = 20 * 60 * 60 * 1000; // 20 horas
+// Conferir a versão é um pedido de alguns kilobytes; baixar é que
+// custa. Então a conferência acontece TODA vez que o app abre, e o
+// download só quando o número é diferente do instalado.
+//
+// Os dez minutos abaixo não são para economizar rede: são para o caso
+// de alguém abrir e fechar o app em sequência. Antes eram vinte horas,
+// e por isso uma versão publicada de manhã só aparecia no dia
+// seguinte — foi o que aconteceu no lançamento da 4.0.
+const ESPERA_ENTRE_BUSCAS = 10 * 60 * 1000;
 const CHAVE_ULTIMA_BUSCA = 'cf:ultimaBuscaDeVersao';
 const CHAVE_JA_OFERECIDA = 'cf:versaoJaOferecida';
 
@@ -84,10 +92,10 @@ async function lerDoGitHub(p, chave, caminho) {
  * dia: quem abre o app cinco vezes no dia não gasta internet cinco
  * vezes.
  */
-async function procurarNoAndroid(p) {
+async function procurarNoAndroid(p, agoraMesmo = false) {
   const agora = Date.now();
   const ultima = Number(localStorage.getItem(CHAVE_ULTIMA_BUSCA) || 0);
-  if (agora - ultima < ESPERA_ENTRE_BUSCAS) return null;
+  if (!agoraMesmo && agora - ultima < ESPERA_ENTRE_BUSCAS) return null;
 
   const chave = await token();
   if (!chave) return null;
@@ -146,6 +154,39 @@ export function cuidarDaAtualizacao() {
   const p = plugin();
   if (!p) return; // no computador quem cuida é o Electron
   setTimeout(() => cuidarDoAndroid(p), 4000);
+}
+
+/**
+ * Procurar na hora, sem esperar a vez.
+ *
+ * Existe porque a espera automática é longa de propósito (não faz
+ * sentido bater no GitHub a cada abertura), mas quem acabou de saber
+ * que saiu versão nova não quer esperar horas.
+ *
+ * Devolve: 'baixando' quando achou e está trazendo, 'emdia' quando
+ * não há nada novo, 'pronta' quando já havia uma baixada esperando,
+ * ou 'semrede' quando não deu para perguntar.
+ */
+export async function procurarAgora() {
+  const p = plugin();
+
+  // No computador quem procura é o processo principal do Electron.
+  if (window.cfAPI?.procurarAtualizacao) {
+    try {
+      const r = await window.cfAPI.procurarAtualizacao();
+      return r?.versao ? 'baixando' : 'emdia';
+    } catch { return 'semrede'; }
+  }
+
+  if (!p) return 'emdia';
+  try {
+    const pronta = await p.pendente();
+    if (pronta?.versao && maisNovaQue(pronta.versao, VERSAO)) return 'pronta';
+    const achou = await procurarNoAndroid(p, true);
+    return achou ? 'baixando' : 'emdia';
+  } catch {
+    return 'semrede';
+  }
 }
 
 /** Abre o instalador do que já foi baixado. Usado pelo botão dos Ajustes. */

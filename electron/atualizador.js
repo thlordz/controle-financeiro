@@ -22,7 +22,10 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 
 const REPO = 'thlordz/controle-financeiro';
-const ESPERA_ENTRE_BUSCAS = 20 * 60 * 60 * 1000; // 20 horas
+// De quanto em quanto tempo olhar de novo enquanto o app fica aberto.
+// A primeira conferência acontece logo depois de abrir, sempre: ela
+// custa alguns kilobytes, e é o download que é caro.
+const ESPERA_ENTRE_BUSCAS = 60 * 60 * 1000;
 
 /** Onde os arquivos baixados esperam até a hora da troca. */
 const NOME_PASTA = '.atualizacao';

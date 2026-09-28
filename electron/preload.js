@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('cfAPI', {
   salvarComo: (arquivo) => ipcRenderer.invoke('cf:salvarComo', arquivo),
   http: (pedido) => ipcRenderer.invoke('cf:http', pedido),
   arte: (caminho) => ipcRenderer.invoke('cf:arte', caminho),
-  atualizacao: () => ipcRenderer.invoke('cf:atualizacao')
+  atualizacao: () => ipcRenderer.invoke('cf:atualizacao'),
+  procurarAtualizacao: () => ipcRenderer.invoke('cf:procurarAtualizacao')
 });

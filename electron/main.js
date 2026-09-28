@@ -139,7 +139,9 @@ app.whenReady().then(() => {
 function cuidarDaAtualizacao() {
   atualizador.retomar(pastaBase());
   const olhar = () => atualizador.procurar(pastaBase());
-  setTimeout(olhar, 30000).unref?.();
+  // Logo na abertura, mas não no mesmo instante: a janela aparece
+  // primeiro, a rede depois.
+  setTimeout(olhar, 3000).unref?.();
   setInterval(olhar, atualizador.ESPERA_ENTRE_BUSCAS).unref?.();
 }
 
@@ -156,6 +158,14 @@ app.on('window-all-closed', () => {
 // ---------------------- IPC ----------------------
 
 ipcMain.handle('cf:atualizacao', () => atualizador.temAtualizacaoPronta());
+
+// Procurar na hora, a pedido da tela. A busca automática é espaçada de
+// propósito; este é o atalho para quem acabou de saber que saiu versão.
+ipcMain.handle('cf:procurarAtualizacao', async () => {
+  const jaTem = atualizador.temAtualizacaoPronta();
+  if (jaTem) return jaTem;
+  return atualizador.procurar(pastaBase());
+});
 
 ipcMain.handle('cf:obterArquivo', () => {
   const caminho = caminhoDados();

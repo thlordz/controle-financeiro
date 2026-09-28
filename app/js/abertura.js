@@ -82,10 +82,10 @@ export function fecharAbertura() {
   passo('pronto', 100);
   // Tempo mínimo em pé. Com os dados no próprio aparelho a carga é
   // instantânea, e uma tela que aparece e some no mesmo piscar
-  // incomoda mais do que uma que fica um instante. Um segundo e meio
-  // dá para ler a frase sem parecer demora.
+  // incomoda mais do que uma que fica um instante. Dois segundos e
+  // meio dá para ler a frase com calma, que é a graça dela.
   const passado = Date.now() - comecou;
-  const esperar = Math.max(0, 1500 - passado);
+  const esperar = Math.max(0, 2600 - passado);
   setTimeout(() => {
     const tela = $('abertura');
     if (!tela) return;

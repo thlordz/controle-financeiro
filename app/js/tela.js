@@ -83,6 +83,10 @@ function icone(nome, tamanho = 21) {
     parcela:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M9 15h6"/>',
     check:'<path d="M4.5 12.6 9.4 17.5 19.5 7.2"/>',
     sino:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+    gota:'<path d="M12 3s6 6.4 6 10.4A6 6 0 0 1 6 13.4C6 9.4 12 3 12 3Z"/>',
+    quadro:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="9" cy="9" r="1.4"/>',
+    letra:'<path d="M5 19 12 5l7 14M8.2 14h7.6"/>',
+    atualizar:'<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
     filme:'<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M7 5v14M17 5v14M2.5 12h19M2.5 8.5h4.5M2.5 15.5h4.5M17 8.5h4.5M17 15.5h4.5"/>',
     fogo:'<path d="M12 22c4 0 6.5-2.6 6.5-6 0-4.5-4.5-6-4-11-2.5 1.5-4 4-4 6.5 0 1.5-1 2-1.5 1.5-1-1-1-2.5-1-2.5S5.5 12 5.5 16c0 3.4 2.5 6 6.5 6Z"/>',
     sol:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>',
@@ -98,7 +102,7 @@ function icone(nome, tamanho = 21) {
 
    Nada aqui recalcula nada: são adaptadores finos que traduzem os
    nomes que a tela usa para os que o `calculos.js` e o `planta.js`
-   devolvem. Foi de propósito — aqueles módulos têm 87 testes em cima
+   devolvem. Foi de propósito, aqueles módulos têm 87 testes em cima
    e não podem ser reescritos por causa de uma troca de desenho.
    =================================================================== */
 function statusDevedor(v) { return statusDevedorReal(v); }
@@ -166,7 +170,11 @@ const TELAS = {
  */
 function voltarDoAndroid() {
   if ($('folha').classList.contains('aberta')) { fecharFolha(); return true; }
-  if (estado.tela === 'ajustes' && estado.ajuste) { voltarDosAjustes(); return true; }
+  if (estado.tela === 'ajustes' && estado.ajuste) {
+    if (estado.ajuste.includes('/')) irNoAjuste(estado.ajuste.split('/')[0]);
+    else voltarDosAjustes();
+    return true;
+  }
   if (estado.tela !== 'inicio') { ir('inicio', true); return true; }
   return false; // nada mais para desfazer: o app fecha
 }
@@ -180,6 +188,25 @@ window.addEventListener('popstate', () => {
   // Se voltarDoAndroid devolveu falso, deixamos o navegador ir embora:
   // é o equivalente a fechar o aplicativo.
 });
+
+/**
+ * O botão físico do Android.
+ *
+ * Sem este trecho o sistema não pergunta nada a ninguém: ele olha se
+ * a tela tem histórico e, não tendo, fecha o app. Era o que estava
+ * acontecendo, o primeiro toque em voltar matava o aplicativo em vez
+ * de ir para o início.
+ *
+ * Com o ouvinte, quem decide somos nós, e só chamamos `exitApp()`
+ * quando realmente não há para onde voltar.
+ */
+function ligarVoltarDoAndroid() {
+  const App = window.Capacitor?.Plugins?.App;
+  if (!App?.addListener) return;
+  App.addListener('backButton', () => {
+    if (!voltarDoAndroid()) App.exitApp();
+  });
+}
 
 function ir(tela, doVoltar) {
   if (!doVoltar && tela !== estado.tela) history.pushState({ dentro: true }, '');
@@ -243,7 +270,7 @@ function desenharBarra() {
   const comBusca = ['receitas','despesas','devedores'].includes(estado.tela);
   $('barra').innerHTML = `<div class="barra__interno">
     <div class="barra__titulo">${estado.tela === 'ajustes' && estado.ajuste
-      ? SECOES_AJUSTES[estado.ajuste].nome : TELAS[estado.tela].nome}</div>
+      ? fichaDaSecao(estado.ajuste).nome : TELAS[estado.tela].nome}</div>
     ${comBusca ? `<div class="busca">${icone('lupa',17)}
       <input placeholder="Procurar em ${TELAS[estado.tela].nome.toLowerCase()}…" value="${estado.busca}"
              oninput="estado.busca=this.value; redesenharLista()"></div>` : ''}
@@ -272,6 +299,13 @@ function redesenharLista() {
   }
 }
 
+/**
+ * O cabeçalho das telas internas gruda no topo.
+ *
+ * Numa lista de quinhentos lançamentos, rolar um pouco já fazia o
+ * botão de voltar sumir, e a única saída virava o botão físico do
+ * aparelho. Agora ele fica sempre à mão, junto com o nome da tela.
+ */
 function cabecalhoCelular(titulo) {
   if (estado.tela === 'inicio') return `
     <header class="topo celular-so">
@@ -283,7 +317,7 @@ function cabecalhoCelular(titulo) {
       <button class="redondo" onclick="ir('ajustes')" aria-label="Ajustes">${icone('engrenagem',20)}</button>
     </header>`;
   return `
-    <div class="voltar celular-so">
+    <div class="voltar voltar--grudado celular-so">
       <button class="redondo" onclick="ir('inicio')" aria-label="Voltar">${icone('volta',20)}</button>
       <div class="voltar__titulo">${titulo}</div>
     </div>`;
@@ -1003,7 +1037,7 @@ function resumoDaSecao(chave) {
       : 'Desligada',
     banco: c && c.ligado ? 'Ligado' : 'Só neste aparelho',
     backup: 'Guardar ou trazer de volta',
-    sobre: `Versão 3.1`,
+    sobre: `Versão ${VERSAO}`,
     apagar: 'Some com tudo e recomeça',
   }[chave];
 }
@@ -1072,6 +1106,27 @@ function explicarEscudos() {
     <button class="principal" onclick="fecharFolha()">Entendi!</button>`);
 }
 
+/**
+ * Procurar atualização na hora, a pedido.
+ *
+ * A conferência automática já acontece toda vez que o app abre, mas
+ * quem acabou de saber que saiu versão nova não quer fechar e abrir.
+ */
+async function procurarAtualizacaoAgora() {
+  const recado = $('recadoDaVersao');
+  if (recado) recado.textContent = 'Olhando...';
+  const { procurarAgora } = await import('./atualizacao.js');
+  const r = await procurarAgora();
+  const frases = {
+    baixando: 'Achei versão nova! Estou baixando.',
+    pronta: 'Já tenho a versão nova aqui, esperando.',
+    emdia: 'Você já está na mais nova.',
+    semrede: 'Não consegui perguntar agora. Sem internet?',
+  };
+  avisar(frases[r] || frases.emdia);
+  if (recado) recado.textContent = frases[r] || 'Eu confiro sozinho toda vez que abro';
+}
+
 function telaAjustes() {
   if (estado.ajuste) return secaoDeAjuste(estado.ajuste);
   return cabecalhoCelular('Ajustes') + `
@@ -1094,10 +1149,25 @@ function voltarDosAjustes() {
   window.scrollTo({ top: 0 });
 }
 
+const SUB_APARENCIA = {
+  'aparencia/tema':  { nome: 'Claro ou escuro', icone: 'sol',    cor: 'ouro' },
+  'aparencia/cor':   { nome: 'Cor do app',      icone: 'gota',   cor: 'menta' },
+  'aparencia/fundo': { nome: 'Fundo',           icone: 'quadro', cor: 'verde' },
+  'aparencia/fonte': { nome: 'Fonte',           icone: 'letra',  cor: 'ouro' },
+};
+
+function fichaDaSecao(chave) {
+  return SECOES_AJUSTES[chave] || SUB_APARENCIA[chave];
+}
+
 function tituloDaSecao(chave) {
-  return `<div class="voltar voltar--sempre">
-    <button class="redondo" onclick="voltarDosAjustes()" aria-label="Voltar">${icone('volta',20)}</button>
-    <div class="voltar__titulo">${SECOES_AJUSTES[chave].nome}</div>
+  // Uma sub-seção volta para a lista de Aparência, não para a raiz
+  // dos Ajustes: pular dois níveis de uma vez desorienta.
+  const pai = chave.includes('/') ? chave.split('/')[0] : null;
+  const voltar = pai ? `irNoAjuste('${pai}')` : 'voltarDosAjustes()';
+  return `<div class="voltar voltar--sempre voltar--grudado">
+    <button class="redondo" onclick="${voltar}" aria-label="Voltar">${icone('volta',20)}</button>
+    <div class="voltar__titulo">${fichaDaSecao(chave).nome}</div>
   </div>`;
 }
 
@@ -1111,7 +1181,11 @@ function secaoDeAjuste(chave) {
       </div>
       <p class="explica explica--fraco">É só pra te dar oi na abertura. Nada demais.</p>`,
 
-    aparencia: () => conteudoDaAparencia(),
+    aparencia: () => listaDaAparencia(),
+    'aparencia/tema': () => parteDoTema(),
+    'aparencia/cor': () => parteDaCor(),
+    'aparencia/fundo': () => parteDoFundo(),
+    'aparencia/fonte': () => parteDaFonte(),
 
     lembrete: () => `
       <label class="chave">
@@ -1191,10 +1265,17 @@ function secaoDeAjuste(chave) {
       <div class="cartao" style="cursor:default">
         <span class="pastilha pastilha--menta">${icone('subindo')}</span>
         <span class="cartao__meio">
-          <div class="chave__nome">Versão 3.1</div>
-          <div class="chave__sub">Eu me atualizo sozinho, não precisa fazer nada</div>
+          <div class="chave__nome">Versão ${VERSAO}</div>
+          <div class="chave__sub" id="recadoDaVersao">Eu confiro sozinho toda vez que abro</div>
         </span>
       </div>
+      <button class="cartao" style="margin-top:10px" onclick="procurarAtualizacaoAgora()">
+        <span class="pastilha pastilha--ouro">${icone('atualizar')}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">Procurar agora</div>
+          <div class="chave__sub">Se acabou de sair versão nova e você não quer esperar</div>
+        </span>
+      </button>
       <div class="cartao" style="cursor:default;margin-top:10px">
         <span class="pastilha pastilha--ouro">${icone('cartao')}</span>
         <span class="cartao__meio">
@@ -2497,11 +2578,97 @@ async function tirarFoto() {
   avisar('Tirei o fundo');
 }
 
-/** A tela de aparência inteira: claro/escuro, cor, fundo e fonte. */
-function conteudoDaAparencia() {
-  const temFundo = visual.fundo !== 'nenhum';
+/* ===================================================================
+   Aparência, em quatro assuntos.
+
+   Era uma tela só, longa demais, com um parágrafo de explicação no
+   meio que ninguém lia. Agora cada assunto tem a sua tela, e o texto
+   que explicava as coisas virou um "?" ao lado do título, quem
+   precisa, toca; quem não precisa, não tropeça nele.
+   =================================================================== */
+
+function resumoDaAparencia(chave) {
+  return {
+    'aparencia/tema':  TEMAS[temaEscolhido()].nome,
+    'aparencia/cor':   CORES[visual.cor].nome,
+    'aparencia/fundo': FUNDOS[visual.fundo].nome,
+    'aparencia/fonte': FONTES[fonteEscolhida()].nome,
+  }[chave];
+}
+
+function listaDaAparencia() {
+  return `<div class="pilha">
+    ${Object.entries(SUB_APARENCIA).map(([chave, f]) => `
+      <button class="cartao" onclick="irNoAjuste('${chave}')">
+        <span class="pastilha pastilha--${f.cor}">${icone(f.icone)}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">${f.nome}</div>
+          <div class="chave__sub">${escapar(resumoDaAparencia(chave))}</div>
+        </span>
+        <span class="cartao__acao">${icone('seta',15)}</span>
+      </button>`).join('')}
+  </div>`;
+}
+
+/** Um título com um "?" que abre a explicação daquele assunto. */
+function tituloComAjuda(texto, assunto) {
+  return `<div class="titulo-ajuda">
+    <span class="secao-form__nome" style="margin:0">${texto}</span>
+    <button class="ajuda-botao" onclick="explicarAjuste('${assunto}')" aria-label="O que é isso?">
+      ${icone('ajuda', 15)}
+    </button>
+  </div>`;
+}
+
+const EXPLICACOES = {
+  tema: {
+    titulo: 'Claro ou escuro',
+    texto: `Escuro cansa menos os olhos à noite; claro se lê melhor no sol.
+      Deixando em "igual ao aparelho", eu mudo junto quando o seu celular muda.`,
+  },
+  cor: {
+    titulo: 'A cor do app',
+    texto: `É a cor dos botões, dos ícones e dos destaques. Cada uma tem uma
+      versão para o tema claro e outra para o escuro, então trocar de tema não
+      estraga a cor que você escolheu.`,
+  },
+  transparencia: {
+    titulo: 'Transparência e efeito vidro',
+    texto: `<b>Transparência</b> é o quanto o fundo aparece através dos cartões.
+      Quanto mais transparente, mais você vê o fundo, e mais difícil fica ler
+      os números.<br><br>
+      <b>Efeito vidro</b> deixa o fundo borrado onde ele atravessa. É o que
+      permite ver o fundo sem perder a leitura: o desenho continua ali, mas sem
+      concorrer com os números.<br><br>
+      Se as letras sumirem, diminua a transparência ou aumente o vidro. E se o
+      seu fundo for muito claro, troque o tema para claro, eu não tenho como
+      adivinhar a foto que você escolheu.`,
+  },
+  brilho: {
+    titulo: 'Brilho do fundo',
+    texto: `Escurece a sua foto, GIF ou vídeo sem mexer nos cartões. É o jeito
+      mais rápido de fazer um fundo claro demais parar de brigar com o texto.`,
+  },
+  fonte: {
+    titulo: 'A fonte',
+    texto: `A primeira muda só os números e os títulos, deixando o resto numa
+      letra calma de ler. As outras duas mudam tudo. Os valores continuam
+      alinhados em coluna em qualquer uma, para o dinheiro não dançar.`,
+  },
+};
+
+function explicarAjuste(assunto) {
+  const e = EXPLICACOES[assunto];
+  if (!e) return;
+  mostrarFolha(`
+    <div class="folha__titulo">${e.titulo}</div>
+    <p class="explica">${e.texto}</p>
+    <button class="principal" onclick="fecharFolha()">Entendi!</button>`);
+}
+
+function parteDoTema() {
   return `
-    <div class="secao-form__nome" style="margin-top:4px">Claro ou escuro</div>
+    ${tituloComAjuda('Como o app se veste', 'tema')}
     <div class="pilha">
       ${Object.entries(TEMAS).map(([chave, t]) => `
         <button class="cartao ${chave===temaEscolhido()?'item--marcado':''}" onclick="trocarTema('${chave}')">
@@ -2512,9 +2679,12 @@ function conteudoDaAparencia() {
           </span>
           ${chave===temaEscolhido() ? `<span class="cartao__acao">${icone('check',16)}</span>` : ''}
         </button>`).join('')}
-    </div>
+    </div>`;
+}
 
-    <div class="secao-form__nome">Cor do app</div>
+function parteDaCor() {
+  return `
+    ${tituloComAjuda('Escolha uma', 'cor')}
     <div class="cores">
       ${Object.entries(CORES).map(([chave, c]) => `
         <button class="cor ${chave===visual.cor?'cor--ativa':''}" onclick="mudarCor('${chave}')"
@@ -2522,8 +2692,27 @@ function conteudoDaAparencia() {
           ${chave===visual.cor ? `<span style="color:${temaEmUso()==='escuro'?c.sobreEscuro:c.sobreClaro}">${icone('check',18)}</span>` : ''}
         </button>`).join('')}
     </div>
+    <p class="explica explica--fraco">${CORES[visual.cor].nome} agora.</p>`;
+}
 
-    <div class="secao-form__nome">Fundo</div>
+function parteDaFonte() {
+  return `
+    ${tituloComAjuda('Escolha uma', 'fonte')}
+    <div class="pilha">
+      ${Object.entries(FONTES).map(([chave, f]) => `
+        <button class="cartao ${chave===fonteEscolhida()?'item--marcado':''}" onclick="trocarFonte('${chave}')">
+          <span class="cartao__meio">
+            <span class="chave__nome" style="font-family:${f.destaque}">${f.nome} · R$ 1.234,56</span>
+            <span class="chave__sub">${f.sub}</span>
+          </span>
+          ${chave===fonteEscolhida() ? `<span class="cartao__acao">${icone('check',16)}</span>` : ''}
+        </button>`).join('')}
+    </div>`;
+}
+
+function parteDoFundo() {
+  const temFundo = visual.fundo !== 'nenhum';
+  return `
     <div class="fundos">
       ${Object.entries(FUNDOS).map(([chave, f]) => `
         <button class="fundo ${chave===visual.fundo?'fundo--ativo':''}" onclick="mudarFundo('${chave}')">
@@ -2541,11 +2730,11 @@ function conteudoDaAparencia() {
     </p>` : ''}
 
     ${temFundo ? `
-      <div class="secao-form__nome">Como vai ficar</div>
+      ${tituloComAjuda('Como vai ficar', 'transparencia')}
       ${previaDoFundo()}
 
       ${TEM_ARQUIVO.includes(visual.fundo) ? `
-        <div class="secao-form__nome">Brilho do fundo</div>
+        ${tituloComAjuda('Brilho do fundo', 'brilho')}
         <div class="medidas">
           ${BRILHOS.map((b) => `
             <button class="medida ${b.valor===visual.brilho?'medida--ativa':''}"
@@ -2564,59 +2753,62 @@ function conteudoDaAparencia() {
         ${OPACIDADES.map((o) => `
           <button class="medida ${o.valor===visual.opacidade?'medida--ativa':''}"
             onclick="mudarOpacidade(${o.valor})">${o.nome}</button>`).join('')}
-      </div>
+      </div>` : ''}`;
+}
 
-      <p class="explica explica--fraco">
-        <b>Transparência</b> é o quanto o fundo atravessa os cartões.
-        <b>Efeito vidro</b> é o quanto ele fica borrado ao atravessar. Os dois
-        juntos são o que deixa o cartão parecendo vidro fosco.
-      </p>
-      <p class="explica explica--fraco">
-        Se o seu fundo for claro e as letras sumirem, troca ali em cima para o
-        tema claro. Eu não tenho como adivinhar a foto que você escolheu.
-      </p>` : ''}
-
-    <div class="secao-form__nome">Fonte</div>
-    <div class="pilha">
-      ${Object.entries(FONTES).map(([chave, f]) => `
-        <button class="cartao ${chave===fonteEscolhida()?'item--marcado':''}" onclick="trocarFonte('${chave}')">
-          <span class="cartao__meio">
-            <span class="chave__nome" style="font-family:${f.destaque}">${f.nome} · R$ 1.234,56</span>
-            <span class="chave__sub">${f.sub}</span>
-          </span>
-          ${chave===fonteEscolhida() ? `<span class="cartao__acao">${icone('check',16)}</span>` : ''}
-        </button>`).join('')}
-    </div>`;
+/**
+ * Preenche os lugares que mostram o arquivo de fundo (a prévia e a
+ * miniatura) assim que ele é lido do IndexedDB. Não dá para fazer
+ * isso na montagem do HTML porque a leitura é assíncrona.
+ */
+async function preencherAmostrasDeArquivo() {
+  if (!TEM_ARQUIVO.includes(visual.fundo)) return;
+  const m = await lerMidia();
+  if (!m) return;
+  for (const onde of document.querySelectorAll('.amostra-arquivo, .previa__papel--arquivo')) {
+    onde.innerHTML = '';
+    if (m.tipo === 'video') {
+      const v = document.createElement('video');
+      v.src = m.url; v.autoplay = true; v.loop = true; v.muted = true;
+      v.playsInline = true; v.setAttribute('muted', '');
+      v.className = 'papel__video';
+      onde.appendChild(v);
+    } else {
+      onde.style.backgroundImage = `url(${m.url})`;
+      onde.style.backgroundSize = 'cover';
+      onde.style.backgroundPosition = 'center';
+    }
+  }
 }
 
 /* Valores prontos em vez de barrinha: é mais fácil acertar e mais
    fácil repetir. Os nomes dizem o efeito, o número fica escondido. */
 const DESFOQUES = [
-  { nome: 'Nenhum',   valor: 0 },
-  { nome: 'Leve',     valor: 4 },
-  { nome: 'Médio',    valor: 10 },
-  { nome: 'Forte',    valor: 18 },
-  { nome: 'Vidro',    valor: 28 },
-];
-const BRILHOS = [
-  { nome: 'Normal',      valor: 100 },
-  { nome: 'Um pouco',    valor: 80 },
-  { nome: 'Na metade',   valor: 60 },
-  { nome: 'Bem escuro',  valor: 40 },
-  { nome: 'Quase apagado', valor: 22 },
+  { nome: 'Nenhum', valor: 0 },
+  { nome: 'Leve',   valor: 4 },
+  { nome: 'Médio',  valor: 10 },
+  { nome: 'Forte',  valor: 18 },
+  { nome: 'Vidro',  valor: 28 },
 ];
 const OPACIDADES = [
-  { nome: 'Sólido',        valor: 100 },
-  { nome: 'Quase sólido',  valor: 88 },
-  { nome: 'Translúcido',   valor: 72 },
-  { nome: 'Bem clarinho',  valor: 55 },
+  { nome: 'Sólido',          valor: 100 },
+  { nome: 'Quase sólido',    valor: 88 },
+  { nome: 'Translúcido',     valor: 72 },
+  { nome: 'Bem clarinho',    valor: 55 },
   { nome: 'Quase invisível', valor: 38 },
+];
+const BRILHOS = [
+  { nome: 'Normal',        valor: 100 },
+  { nome: 'Um pouco',      valor: 80 },
+  { nome: 'Na metade',     valor: 60 },
+  { nome: 'Bem escuro',    valor: 40 },
+  { nome: 'Quase apagado', valor: 22 },
 ];
 
 /**
- * A prévia: o fundo escolhido com dois cartões de mentira por cima.
- * É o único jeito de a pessoa decidir desfoque e transparência sem
- * ter que sair da tela para conferir.
+ * A prévia: o fundo escolhido com quatro elementos de mentira por
+ * cima. É o único jeito de decidir vidro e transparência sem sair da
+ * tela para conferir.
  */
 function previaDoFundo() {
   const ehArquivo = TEM_ARQUIVO.includes(visual.fundo) && visual.midia;
@@ -2664,31 +2856,6 @@ function previaDoFundo() {
       </span>
     </div>
   </div>`;
-}
-
-/**
- * Preenche os lugares que mostram o arquivo de fundo (a prévia e a
- * miniatura) assim que ele é lido do IndexedDB. Não dá para fazer
- * isso na montagem do HTML porque a leitura é assíncrona.
- */
-async function preencherAmostrasDeArquivo() {
-  if (!TEM_ARQUIVO.includes(visual.fundo)) return;
-  const m = await lerMidia();
-  if (!m) return;
-  for (const onde of document.querySelectorAll('.amostra-arquivo, .previa__papel--arquivo')) {
-    onde.innerHTML = '';
-    if (m.tipo === 'video') {
-      const v = document.createElement('video');
-      v.src = m.url; v.autoplay = true; v.loop = true; v.muted = true;
-      v.playsInline = true; v.setAttribute('muted', '');
-      v.className = 'papel__video';
-      onde.appendChild(v);
-    } else {
-      onde.style.backgroundImage = `url(${m.url})`;
-      onde.style.backgroundSize = 'cover';
-      onde.style.backgroundPosition = 'center';
-    }
-  }
 }
 
 /** Uma miniatura de cada fundo, desenhada com o próprio CSS dele. */
@@ -2793,7 +2960,8 @@ Object.assign(window, {
   temaEscolhido, fonteEscolhida, aplicarVisual, restaurarBackup,
   estado, visual, guardarVisual, preencherAmostrasDeArquivo,
   conexaoGuardada, mostrarEntrada, esconderEntrada, normalizarEndereco,
-  explicarEscudos, blocoDeEscudos,
+  explicarEscudos, blocoDeEscudos, explicarAjuste, listaDaAparencia,
+  procurarAtualizacaoAgora,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
@@ -2824,6 +2992,7 @@ export function iniciarTela(dados) {
   estado.mes = hoje().getMonth();
   history.replaceState({ raiz: true }, '');
   history.pushState({ dentro: true }, '');
+  ligarVoltarDoAndroid();
   $('fab').onclick = abrirNovo;
   $('cortina').onclick = fecharFolha;
   desenhar();
