@@ -71,7 +71,15 @@ fi
 
 # ------------------------------------------------------------------
 # Build
+#
+# Antes de tudo, conferir que a versão existe. O gerar-apk.sh já fazia
+# isso; aqui não fazia, e um versao.js vazio produziu um AppImage que
+# não abria e ainda foi copiado por cima do app do PC.
 # ------------------------------------------------------------------
+VERSAO_APP="$(sed -n "s/^export const VERSAO = '\([^']*\)'.*/\1/p" app/js/versao.js)"
+[ -n "$VERSAO_APP" ] || { echo "PAREI: não achei a versão em app/js/versao.js"; exit 1; }
+echo "Gerando a versão $VERSAO_APP"
+
 npm run dist
 
 # O app do Windows não é mais um pacote `app.asar` e sim a pasta

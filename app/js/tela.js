@@ -1299,7 +1299,9 @@ function secaoDeAjuste(chave) {
   }[chave];
   let dentro = '';
   try {
-    dentro = corpo ? corpo() : '';
+    // Todo o conteúdo de uma seção vai dentro de um painel: sem ele,
+    // título e botão ficam soltos sobre o papel de parede e somem.
+    dentro = corpo ? `<div class="painel">${corpo()}</div>` : '';
   } catch (e) {
     // Sem isto, um erro aqui deixaria a tela em branco e sem saída.
     console.error('Ajustes:', e);
@@ -2621,6 +2623,13 @@ function tituloComAjuda(texto, assunto) {
 }
 
 const EXPLICACOES = {
+  fundo: {
+    titulo: 'O fundo',
+    texto: `Os primeiros são desenhados pelo app e ficam bem em qualquer tema.
+      Os três últimos são seus: foto, GIF ou vídeo. Escolhendo um seu, aparecem
+      os controles de brilho, vidro e transparência para você deixar o texto
+      legível por cima dele.`,
+  },
   tema: {
     titulo: 'Claro ou escuro',
     texto: `Escuro cansa menos os olhos à noite; claro se lê melhor no sol.
@@ -2713,6 +2722,7 @@ function parteDaFonte() {
 function parteDoFundo() {
   const temFundo = visual.fundo !== 'nenhum';
   return `
+    ${tituloComAjuda('Escolha um', 'fundo')}
     <div class="fundos">
       ${Object.entries(FUNDOS).map(([chave, f]) => `
         <button class="fundo ${chave===visual.fundo?'fundo--ativo':''}" onclick="mudarFundo('${chave}')">

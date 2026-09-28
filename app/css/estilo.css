@@ -746,3 +746,36 @@ body.com-fundo .folha .conta{
   transition:background 170ms, color 170ms;
 }
 .ajuda-botao:hover{ background:var(--menta-fundo); color:var(--menta-frente) }
+
+/* ===================================================================
+   Painel: a superfície que faz o conteúdo dos Ajustes existir.
+
+   Título de seção e botão de escolha eram texto solto sobre o fundo.
+   Com fundo liso dava certo; com uma foto por baixo, sumiam. Agora
+   cada grupo tem chão próprio, e o fundo aparece em volta em vez de
+   por baixo das letras.
+   =================================================================== */
+.painel{
+  background:var(--cartao);
+  border-radius:var(--canto-g);
+  padding:4px 16px 16px;
+  margin-bottom:12px;
+}
+body.com-fundo .painel{
+  background:color-mix(in srgb, var(--cartao) var(--opacidade-modal, 100%), transparent);
+  backdrop-filter:blur(var(--desfoque-modal, 0px));
+  -webkit-backdrop-filter:blur(var(--desfoque-modal, 0px));
+}
+/* Dentro do painel os cartões voltam a ser sólidos: transparência
+   sobre transparência vira sopa. */
+body.com-fundo .painel .cartao,
+body.com-fundo .painel .item{
+  background:var(--cartao-alto); backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.painel > .secao-form__nome:first-child,
+.painel > .titulo-ajuda:first-child{ margin-top:14px }
+
+/* Os botões de escolha ganham chão em vez de só contorno. */
+.medida{ background:var(--cartao-alto) }
+.medida:hover{ background:var(--cartao-toque) }
+.fundo{ background:var(--cartao-alto) }
