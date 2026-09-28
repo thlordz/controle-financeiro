@@ -14,7 +14,7 @@
 // de dados usar.
 // =========================================================
 
-import { salvarArquivo } from './formulario.js';
+import { salvarArquivo } from './arquivos.js';
 import { podarRemovidos, anotarCarimbo } from './dominio.js';
 import { nomeDoMes, hoje } from './util.js';
 
