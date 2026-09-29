@@ -829,7 +829,18 @@ function linhasDaTela() {
     </div>
     ${barraDeSelecao(recebe)}
     ${itens.length ? itens.map((x) => linhaLancamento(x, recebe)).join('')
-      : `<div class="vazio">${MESES[estado.mes]} está vazio por aqui.<br>Bora lançar o primeiro?</div>`}`;
+      : vazioOuNadaAchado()}`;
+}
+
+/**
+ * Lista vazia tem duas causas, e dizer a errada assusta: quem procurou
+ * algo e leu "o mês está vazio" acha que perdeu os lançamentos.
+ */
+function vazioOuNadaAchado() {
+  if (estado.busca) return `<div class="vazio">Nada com "${escapar(estado.busca)}" aqui.</div>`;
+  if (estado.filtro === 'pendentes') return `<div class="vazio">Nada em aberto. Tudo pago!</div>`;
+  if (estado.filtro === 'fixos') return `<div class="vazio">Nenhum lançamento fixo neste mês.</div>`;
+  return `<div class="vazio">${MESES[estado.mes]} está vazio por aqui.<br>Bora lançar o primeiro?</div>`;
 }
 
 function linhaLancamento(x, recebe) {
@@ -952,6 +963,7 @@ function linhasDeDevedores() {
     .filter((v) => combina(v, CAMPOS_BUSCA.devedores, busca))
     .sort((a, b) => (b.pgtoPrevisto || '').localeCompare(a.pgtoPrevisto || ''));
   if (!itens.length) {
+    if (busca) return `<div class="vazio">Nada com "${escapar(estado.busca)}" aqui.</div>`;
     return `<div class="vazio">Ninguém te devendo em ${MESES[estado.mes].toLowerCase()}.<br>Melhor assim!</div>`;
   }
   return itens.map((v) => {
@@ -2970,7 +2982,24 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
 });
 
-window.addEventListener('resize', () => desenhar());
+/**
+ * Redesenhar quando a janela muda de largura, e só.
+ *
+ * No Android o teclado que sobe conta como "resize": a altura encolhe.
+ * Como isso refazia a tela inteira, o campo de busca era destruído no
+ * instante em que ele ganhava o foco, e o teclado abria e fechava na
+ * cara do usuário. A largura, essa sim, muda quando ele vira o
+ * aparelho ou arrasta a janela no computador — aí redesenhar faz
+ * sentido. Mesmo assim, não no meio de uma digitação.
+ */
+let larguraAnterior = window.innerWidth;
+window.addEventListener('resize', () => {
+  if (window.innerWidth === larguraAnterior) return;
+  larguraAnterior = window.innerWidth;
+  const ativo = document.activeElement;
+  if (['INPUT','SELECT','TEXTAREA'].includes(ativo?.tagName)) return;
+  desenhar();
+});
 
 // Uma entrada de reserva no histórico: é ela que o primeiro "voltar"
 // consome, deixando o app decidir o que fazer.
