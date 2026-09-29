@@ -284,28 +284,18 @@ function desenharBarra() {
     </div></div>`;
 }
 
+/**
+ * Troca só as linhas, deixando o campo de busca de pé.
+ *
+ * Se o recipiente ainda não existir (troca de tela, por exemplo),
+ * cai para o desenho completo.
+ */
 function redesenharLista() {
-  const p = painel();
-  const alvo = $('conteudo');
-  const rolagem = alvo.scrollTop;
-  const estavaNaBusca = document.activeElement?.closest?.('.busca');
-  if (['receitas','despesas'].includes(estado.tela)) alvo.innerHTML = telaLancamentos(estado.tela, p);
-  else if (estado.tela === 'devedores') alvo.innerHTML = telaDevedores();
-  alvo.scrollTop = rolagem;
-  if (estavaNaBusca) {
-    const campo = document.querySelector('.barra__interno .busca input')
-               || document.querySelector('#conteudo .busca input');
-    if (campo) { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }
-  }
+  const lista = $('lista');
+  if (!lista) { desenhar(); return; }
+  lista.innerHTML = linhasDaTela();
 }
 
-/**
- * O cabeçalho das telas internas gruda no topo.
- *
- * Numa lista de quinhentos lançamentos, rolar um pouco já fazia o
- * botão de voltar sumir, e a única saída virava o botão físico do
- * aparelho. Agora ele fica sempre à mão, junto com o nome da tela.
- */
 function cabecalhoCelular(titulo) {
   if (estado.tela === 'inicio') return `
     <header class="topo celular-so">
@@ -813,8 +803,25 @@ function telaLancamentos(qual, p) {
         </span>
       </div>` : ''}
     <div class="busca celular-so" style="margin-bottom:12px">${icone('lupa',17)}
-      <input placeholder="Procurar…" value="${estado.busca}" oninput="estado.busca=this.value; redesenharLista()">
+      <input placeholder="Procurar…" value="${escapar(estado.busca)}"
+             oninput="estado.busca=this.value; redesenharLista()">
     </div>
+    <div id="lista">${linhasDaTela()}</div>`;
+}
+
+/**
+ * Só as linhas, sem o que vem acima delas.
+ *
+ * Existe para o campo de busca ficar FORA do pedaço que se refaz a
+ * cada tecla. Antes eu trocava o conteúdo inteiro, o campo era
+ * destruído junto e o Android fechava o teclado: dava para digitar
+ * uma letra por vez, tocando no campo de novo entre elas.
+ */
+function linhasDaTela() {
+  if (estado.tela === 'devedores') return linhasDeDevedores();
+  const recebe = estado.tela === 'receitas';
+  const itens = listaDoMes(estado.tela);
+  return `
     <div class="fichas">
       <button class="ficha" onclick="abrirParcelar()">${icone('parcela',15)} Parcelar</button>
       <button class="ficha ${estado.filtro==='todos'?'ativa':''}" onclick="estado.filtro='todos'; redesenharLista()">Todos</button>
@@ -921,12 +928,9 @@ function virarDevedor(id) {
 }
 
 function telaDevedores() {
-  const busca = texto(estado.busca);
-  const itens = D.devedores
-    .filter((v) => noMes(v.pgtoPrevisto))
-    .filter((v) => combina(v, CAMPOS_BUSCA.devedores, busca))
-    .sort((a,b) => (b.pgtoPrevisto||'').localeCompare(a.pgtoPrevisto||''));
-  const pagos = D.devedores.filter((v)=>noMes(v.pgtoPrevisto)&&texto(statusDevedor(v))==='pago').reduce((s,v)=>s+(+v.valor||0),0);
+  const pagos = D.devedores
+    .filter((v) => noMes(v.pgtoPrevisto) && texto(statusDevedor(v)) === 'pago')
+    .reduce((s, v) => s + (+v.valor || 0), 0);
   return cabecalhoCelular('Devedores') + barraMesCelular() + `
     <div class="resumo">
       <div class="resumo__metade"><div class="rotulo">Já me pagaram</div>
@@ -934,21 +938,38 @@ function telaDevedores() {
       <div class="resumo__metade"><div class="rotulo">Ainda me devem</div>
         <div class="resumo__valor resumo__valor--ouro dinheiro">${real(devedoresPendentes())}</div></div>
     </div>
-    ${itens.length ? itens.map((v) => {
-      const st = statusDevedor(v);
-      const cls = st==='Pago'?'selo--ok':(st==='Atrasado'?'selo--atrasado':'selo--pendente');
-      return `<div class="item" onclick="abrirDevedor('${v.id}')" role="button" tabindex="0">
-        <span class="item__linha1">
-          <span class="item__data">${bonito(v.pgtoPrevisto)}</span>
-          <button class="selo selo--clicavel ${cls}"
-            onclick="event.stopPropagation(); virarDevedor('${v.id}')"
-            title="Toca aqui pra marcar como pago">${st}</button>
-          <span class="item__valor dinheiro">${real(v.valor)}</span>
-        </span>
-        <span class="item__nome">${escapar(v.nome)||''}</span>
-        <span class="item__cat">${escapar(v.tipo)||''}</span>
-      </div>`;
-    }).join('') : `<div class="vazio">Ninguém te devendo em ${MESES[estado.mes].toLowerCase()}.<br>Melhor assim!</div>`}`;
+    <div class="busca celular-so" style="margin-bottom:12px">${icone('lupa',17)}
+      <input placeholder="Procurar…" value="${escapar(estado.busca)}"
+             oninput="estado.busca=this.value; redesenharLista()">
+    </div>
+    <div id="lista">${linhasDeDevedores()}</div>`;
+}
+
+/** Só as linhas de devedores, pelo mesmo motivo do outro. */
+function linhasDeDevedores() {
+  const busca = texto(estado.busca);
+  const itens = D.devedores
+    .filter((v) => noMes(v.pgtoPrevisto))
+    .filter((v) => combina(v, CAMPOS_BUSCA.devedores, busca))
+    .sort((a, b) => (b.pgtoPrevisto || '').localeCompare(a.pgtoPrevisto || ''));
+  if (!itens.length) {
+    return `<div class="vazio">Ninguém te devendo em ${MESES[estado.mes].toLowerCase()}.<br>Melhor assim!</div>`;
+  }
+  return itens.map((v) => {
+    const st = statusDevedor(v);
+    const cls = st === 'Pago' ? 'selo--ok' : (st === 'Atrasado' ? 'selo--atrasado' : 'selo--pendente');
+    return `<div class="item" onclick="abrirDevedor('${v.id}')" role="button" tabindex="0">
+      <span class="item__linha1">
+        <span class="item__data">${bonito(v.pgtoPrevisto)}</span>
+        <button class="selo selo--clicavel ${cls}"
+          onclick="event.stopPropagation(); virarDevedor('${v.id}')"
+          title="Toca aqui pra marcar como pago">${st}</button>
+        <span class="item__valor dinheiro">${real(v.valor)}</span>
+      </span>
+      <span class="item__nome">${escapar(v.nome)||''}</span>
+      <span class="item__cat">${escapar(v.tipo)||''}</span>
+    </div>`;
+  }).join('');
 }
 
 function telaInvestir() {

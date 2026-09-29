@@ -55,6 +55,12 @@ public class PlantaWidget extends AppWidgetProvider {
 
         v.setViewVisibility(R.id.widget_aviso, entrouHoje ? View.GONE : View.VISIBLE);
 
+        // O nome do estágio, na mesma etiqueta que o app mostra. Ele
+        // vem escrito do lado do JavaScript; aqui só aparece.
+        String nome = p.getString("estagioNome", "");
+        v.setTextViewText(R.id.widget_estagio, nome);
+        v.setViewVisibility(R.id.widget_estagio, nome.isEmpty() ? View.GONE : View.VISIBLE);
+
         // Tocar no widget abre o app.
         Intent abrir = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
         if (abrir != null) {

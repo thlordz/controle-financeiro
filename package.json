@@ -1,6 +1,6 @@
 {
   "name": "controle-financeiro",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Controle Financeiro pessoal — portátil, com dados no pendrive",
   "main": "electron/main.js",
   "private": true,

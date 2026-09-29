@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- O widget no tema escuro do aparelho, com as mesmas cores do app. -->
 <resources>
-    <color name="widget_fundo">#12171E</color>
-    <color name="widget_borda">#26303B</color>
-    <color name="widget_texto">#E7EDF3</color>
-    <color name="widget_fraco">#93A3B4</color>
-    <color name="widget_destaque">#4ADE9B</color>
+    <color name="widget_fundo">#1C1B17</color>
+    <color name="widget_borda">#332F29</color>
+    <color name="widget_texto">#EAE7E0</color>
+    <color name="widget_fraco">#9C978C</color>
+    <color name="widget_destaque">#FFD34E</color>
+    <color name="widget_selo_fundo">#4A3B00</color>
+    <color name="widget_selo_texto">#FFE08A</color>
 </resources>

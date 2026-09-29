@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+    <!-- Cores do widget, as mesmas do app no tema claro. O escuro fica
+         em values-night. Antes era fundo branco com destaque verde, e
+         o widget parecia de outro aplicativo. -->
     <color name="widget_fundo">#FFFFFF</color>
-    <color name="widget_borda">#DDE3EA</color>
-    <color name="widget_texto">#101820</color>
-    <color name="widget_fraco">#64748B</color>
-    <color name="widget_destaque">#12805C</color>
+    <color name="widget_borda">#D9D6CE</color>
+    <color name="widget_texto">#1B1A16</color>
+    <color name="widget_fraco">#615E56</color>
+    <color name="widget_destaque">#8A6A00</color>
+    <color name="widget_selo_fundo">#FBEFBF</color>
+    <color name="widget_selo_texto">#6B5200</color>
 </resources>
