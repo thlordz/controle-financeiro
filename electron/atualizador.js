@@ -183,7 +183,16 @@ async function procurar(pastaBase) {
     if (!maisNovaQue(manifesto.versao, versaoInstalada())) return null;
 
     const plataforma = process.platform === 'win32' ? 'windows' : 'linux';
-    const pacotes = (manifesto.plataformas || {})[plataforma] || [];
+    let pacotes = (manifesto.plataformas || {})[plataforma] || [];
+
+    // No Linux a release leva dois pacotes, e só um serve para quem
+    // está rodando: o AppImage se troca sozinho, o .deb precisa de
+    // senha para instalar. Baixar os dois custava 174 MB para usar
+    // 103. O .deb continua na release, para instalação manual.
+    if (plataforma === 'linux') {
+      if (!process.env.APPIMAGE) return null;   // instalado por .deb: quem atualiza é o apt
+      pacotes = pacotes.filter((p) => p.nome.endsWith('.AppImage'));
+    }
     if (pacotes.length === 0) return null;
 
     const espera = pastaDeEspera(pastaBase);

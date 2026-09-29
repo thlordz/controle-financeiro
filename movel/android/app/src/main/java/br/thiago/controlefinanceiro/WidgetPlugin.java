@@ -33,6 +33,7 @@ public class WidgetPlugin extends Plugin {
                 .putInt("escudos", chamada.getInt("escudos", 0))
                 .putString("estagio", chamada.getString("estagio", "🌱"))
                 .putString("estagioNome", chamada.getString("estagioNome", ""))
+                .putString("estagioChave", chamada.getString("estagioChave", "semente"))
                 .putString("ultimoDia", chamada.getString("ultimoDia", ""))
                 .apply();
 

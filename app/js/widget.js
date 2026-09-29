@@ -42,9 +42,10 @@ export function atualizarWidget(dados) {
       sequencia,
       escudos: escudosDisponiveis(dados),
       estagio: estagioCrescendo(sequencia).emoji,
-      // O nome escrito vai junto: o widget mostra a mesma etiqueta
-      // que o app, e quem escreve o nome é este lado.
+      // O nome escrito e a chave vão junto: o widget mostra a mesma
+      // etiqueta que o app e escolhe o desenho pela chave.
       estagioNome: estagioCrescendo(sequencia).nome,
+      estagioChave: estagioCrescendo(sequencia).chave,
       // O dia do último acesso, não um "entrou hoje" cozido: quem
       // decide isso é o widget, ao desenhar, comparando com a data de
       // então. Gravado aqui, ficaria "sim" para sempre.

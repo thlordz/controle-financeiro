@@ -307,8 +307,7 @@ function cabecalhoCelular(titulo) {
       <button class="redondo" onclick="ir('ajustes')" aria-label="Ajustes">${icone('engrenagem',20)}</button>
     </header>`;
   return `
-    <div class="voltar voltar--grudado celular-so">
-      <button class="redondo" onclick="ir('inicio')" aria-label="Voltar">${icone('volta',20)}</button>
+    <div class="voltar celular-so">
       <div class="voltar__titulo">${titulo}</div>
     </div>`;
 }
@@ -1186,8 +1185,10 @@ function tituloDaSecao(chave) {
   // dos Ajustes: pular dois níveis de uma vez desorienta.
   const pai = chave.includes('/') ? chave.split('/')[0] : null;
   const voltar = pai ? `irNoAjuste('${pai}')` : 'voltarDosAjustes()';
-  return `<div class="voltar voltar--sempre voltar--grudado">
-    <button class="redondo" onclick="${voltar}" aria-label="Voltar">${icone('volta',20)}</button>
+  // O botão só aparece no computador: no celular quem volta é o botão
+  // do aparelho, e repetir a função na tela é ocupar espaço à toa.
+  return `<div class="voltar voltar--sempre">
+    <button class="redondo computador-so" onclick="${voltar}" aria-label="Voltar">${icone('volta',20)}</button>
     <div class="voltar__titulo">${fichaDaSecao(chave).nome}</div>
   </div>`;
 }

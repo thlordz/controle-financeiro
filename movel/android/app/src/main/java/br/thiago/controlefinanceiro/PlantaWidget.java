@@ -39,12 +39,12 @@ public class PlantaWidget extends AppWidgetProvider {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         int sequencia = p.getInt("sequencia", 0);
         int escudos = p.getInt("escudos", 0);
-        String estagio = p.getString("estagio", "🌱");
+
         String ultimoDia = p.getString("ultimoDia", "");
         boolean entrouHoje = hojeISO().equals(ultimoDia);
 
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget_planta);
-        v.setTextViewText(R.id.widget_emoji, estagio);
+        v.setImageViewResource(R.id.widget_planta, desenhoDaPlanta(p.getString("estagioChave", "semente")));
         v.setTextViewText(R.id.widget_numero, String.valueOf(sequencia));
         v.setTextViewText(R.id.widget_rotulo, sequencia == 1 ? "dia seguido" : "dias seguidos");
 
@@ -83,5 +83,27 @@ public class PlantaWidget extends AppWidgetProvider {
     @Override
     public void onUpdate(Context ctx, AppWidgetManager gerente, int[] ids) {
         for (int id : ids) desenhar(ctx, gerente, id);
+    }
+
+    /**
+     * A chave do estágio vira o desenho correspondente.
+     *
+     * São os mesmos desenhos que o app mostra, rasterizados na hora de
+     * gerar o pacote. Um `switch` explícito em vez de procurar o nome
+     * do recurso por reflexão: assim o compilador reclama se algum
+     * desenho sumir, em vez de o widget aparecer vazio no aparelho.
+     */
+    private static int desenhoDaPlanta(String chave) {
+        if (chave == null) return R.drawable.planta_semente;
+        switch (chave) {
+            case "brotando":    return R.drawable.planta_brotando;
+            case "crescendo":   return R.drawable.planta_crescendo;
+            case "florescendo": return R.drawable.planta_florescendo;
+            case "murchando":   return R.drawable.planta_murchando;
+            case "seca":        return R.drawable.planta_seca;
+            case "abandonada":  return R.drawable.planta_abandonada;
+            case "morta":       return R.drawable.planta_morta;
+            default:            return R.drawable.planta_semente;
+        }
     }
 }
