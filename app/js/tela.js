@@ -18,7 +18,7 @@ import {
 } from './planta.js';
 import { svgDaPlanta, svgDoEscudoMini } from './plantaSvg.js';
 import {
-  novoId, carimbar, agora,
+  novoId, carimbar, agora, registrarRemocao,
   copiarFixasReceitas, copiarFixasDespesas, copiarRecorrentesDevedores,
   fixasReceitasACopiar, fixasDespesasACopiar, recorrentesACopiar,
   mesAnterior, proximoMes,
@@ -1839,16 +1839,36 @@ function abrirDevedor(id) {
     </div>`);
 }
 
+/**
+ * Apagar de verdade: tirar daqui E deixar o bilhete.
+ *
+ * Tirar da lista não basta quando existe banco. Para o banco, um
+ * lançamento que some do arquivo é só um lançamento que este aparelho
+ * ainda não conhece — e na sincronia seguinte ele volta, inteirinho.
+ * O bilhete é o que diz "este aqui eu apaguei, na hora tal"; é com
+ * ele que a exclusão viaja para os outros aparelhos.
+ *
+ * O redesenho da 4.0 levou junto quem escrevia esse bilhete, e desde
+ * então apagar era só esconder. Dava para não perceber até a varredura
+ * da 4.8 começar a trazer de volta na mesma hora: o lançamento piscava
+ * e voltava.
+ */
+function apagarDaLista(lista, tipo, id) {
+  const i = lista.findIndex((x) => x.id === id);
+  if (i < 0) return false;
+  lista.splice(i, 1);
+  registrarRemocao(D, tipo, id);
+  return true;
+}
+
 function excluirDevedor(id) {
-  const i = D.devedores.findIndex((d) => d.id === id);
-  if (i >= 0) D.devedores.splice(i, 1);
+  apagarDaLista(D.devedores, 'devedores', id);
   fecharFolha(); estado.escolhido = null; mexeuNosDados(); desenhar(); avisar('Apaguei');
 }
 
 function excluir(id) {
-  for (const lista of [D.receitas, D.despesas]) {
-    const i = lista.findIndex((x)=>x.id===id);
-    if (i >= 0) { lista.splice(i,1); break; }
+  if (!apagarDaLista(D.receitas, 'receitas', id)) {
+    apagarDaLista(D.despesas, 'despesas', id);
   }
   fecharFolha();
   estado.escolhido = null;
@@ -2129,8 +2149,7 @@ function salvarRendimento(id) {
 }
 
 function apagarRendimento(id) {
-  const i = D.investimento.findIndex((x) => x.id === id);
-  if (i >= 0) D.investimento.splice(i, 1);
+  apagarDaLista(D.investimento, 'investimento', id);
   fecharFolha(); mexeuNosDados(); desenhar(); avisar('Apaguei');
 }
 

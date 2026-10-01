@@ -502,5 +502,51 @@ await teste('a varredura não acha buraco quando não há', async () => {
   igual(s2.dados.despesas.length, 2, 'e nada duplicou');
 });
 
+await teste('apagar SEM deixar a marca faz o lançamento voltar', async () => {
+  // Este teste existe para documentar uma armadilha, não um recurso.
+  // Quem apagar um lançamento mexendo só na lista — sem
+  // `registrarRemocao` — vai ver ele voltar na sincronia seguinte, e
+  // a culpa não é da sincronia: para o banco, um id que sumiu do
+  // arquivo é um id que este aparelho ainda não conhece.
+  const banco = bancoFalso();
+  const pc = aparelho({ despesas: [
+    { id: 'z1', valor: 10, descricao: 'Volta', atualizadoEm: T(2) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+
+  const semMarca = aparelho({ despesas: [] });   // tirado da lista, e só
+  semMarca.sincroniaIniciada = true;
+  const s2 = await sincronizar({ cliente: banco, dados: semMarca, desde: s1.marca });
+  igual(s2.dados.despesas.length, 1, 'volta mesmo — é esta a armadilha');
+
+  // Com a marca, fica apagado. É o que o botão do app faz.
+  const comMarca = aparelho({
+    despesas: [],
+    removidos: [{ tipo: 'despesas', id: 'z1', em: T(5) }]
+  });
+  comMarca.sincroniaIniciada = true;
+  const s3 = await sincronizar({ cliente: banco, dados: comMarca, desde: s1.marca });
+  igual(s3.dados.despesas.length, 0, 'com a marca, some de vez');
+});
+
+await teste('a exclusão chega no outro aparelho', async () => {
+  const banco = bancoFalso();
+  const pc = aparelho({ despesas: [
+    { id: 'z2', valor: 10, descricao: 'Vai sumir', atualizadoEm: T(2) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+
+  const celular = await sincronizar({ cliente: banco, dados: aparelho(), desde: '' });
+  igual(celular.dados.despesas.length, 1, 'o celular recebeu');
+
+  // O PC apaga, como o botão faz.
+  const apagou = aparelho({
+    despesas: [], removidos: [{ tipo: 'despesas', id: 'z2', em: T(5) }] });
+  apagou.sincroniaIniciada = true;
+  await sincronizar({ cliente: banco, dados: apagou, desde: s1.marca });
+
+  const depois = await sincronizar({
+    cliente: banco, dados: celular.dados, desde: celular.marca });
+  igual(depois.dados.despesas.length, 0, 'e o celular perde também');
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);
