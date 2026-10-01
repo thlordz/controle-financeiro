@@ -17,13 +17,25 @@ import {
   escudosDisponiveis, DIAS_POR_ESCUDO, MAX_ESCUDOS, DIAS_ATE_MORRER,
 } from './planta.js';
 import { svgDaPlanta, svgDoEscudoMini } from './plantaSvg.js';
-import { novoId, carimbar, agora } from './dominio.js';
+import {
+  novoId, carimbar, agora,
+  copiarFixasReceitas, copiarFixasDespesas, copiarRecorrentesDevedores,
+  mesAnterior,
+} from './dominio.js';
 import { hoje, paraISO, formatarData } from './util.js';
 import { VERSAO } from './versao.js';
 import {
   lerConfiguracao, gravarConfiguracao, limparConfiguracao, estaLigada,
 } from './sincronia.js';
+import {
+  sincronizarAgora, testarConexao, estadoDaSincronia, quandoSincroniaMudar,
+  contarTempo,
+} from './sincroniaApp.js';
 import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
+import { temVersaoNova, versaoLaFora } from './atualizacao.js';
+
+/** No aparelho mesmo, não no navegador nem no Electron. */
+const noCelular = () => Boolean(window.Capacitor?.isNativePlatform?.());
 
 /** Chamado toda vez que a tela mexe nos dados. Ligado em app.js. */
 let aoMexer = () => {};
@@ -46,6 +58,7 @@ const estado = {
   escolhido: null,   // id do lançamento aberto
   busca: '',
   planta: true,   // reposto do que ficou guardado, logo abaixo
+  detalheInicio: false,  // os números de "já entrou / ainda falta" na tela inicial
   filtro: 'todos',
   selecao: new Set(),
   ajuste: null,    // seção aberta dentro dos Ajustes
@@ -80,6 +93,7 @@ function icone(nome, tamanho = 21) {
     mais:'<path d="M12 5v14M5 12h14"/>',
     filtro:'<path d="M4 6h16M7 12h10M10 18h4"/>',
     clipe:'<path d="M21 8.5 12.5 17a4.6 4.6 0 0 1-6.5-6.5l8-8a3 3 0 0 1 4.3 4.3l-8 8a1.5 1.5 0 0 1-2.1-2.1l7.3-7.3"/>',
+    copiar:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     parcela:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M9 15h6"/>',
     check:'<path d="M4.5 12.6 9.4 17.5 19.5 7.2"/>',
     sino:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
@@ -360,6 +374,7 @@ function telaInicio(p) {
         <span class="cartao__meio">
           <span class="rotulo">Receitas do mês</span>
           <span class="cartao__valor dinheiro">${real(p.receitasDoMes)}</span>
+          ${quebra('Já entrou', p.recebido, 'Ainda falta', p.faltaReceber)}
         </span>
       </button>
       <button class="cartao" onclick="ir('despesas')">
@@ -367,6 +382,7 @@ function telaInicio(p) {
         <span class="cartao__meio">
           <span class="rotulo">Despesas do mês</span>
           <span class="cartao__valor dinheiro">${real(p.despesasDoMes)}</span>
+          ${quebra('Já paguei', p.pago, 'Ainda falta', p.faltaPagar)}
         </span>
       </button>
     </div>
@@ -378,6 +394,23 @@ function telaInicio(p) {
       ${atalho('devedores','ouro','gente','Devedores', real(devedoresPendentes())+' a receber')}
       ${atalho('investir','menta','porco','Investir', porcentagemDaMeta()+' da meta')}
     </div>`;
+}
+
+/**
+ * A quebra do valor em "o que já aconteceu" e "o que ainda vem".
+ *
+ * É o mesmo par que as telas de Receitas e Despesas mostram no alto;
+ * aqui ele entra dentro do cartão que já existia, em vez de virar
+ * cartão novo — a tela inicial já é comprida.
+ */
+function quebra(rotuloA, valorA, rotuloB, valorB) {
+  if (!estado.detalheInicio) return '';
+  return `<span class="quebra">
+    <span class="quebra__parte"><span class="quebra__nome">${rotuloA}</span>
+      <span class="quebra__valor quebra__valor--menta dinheiro">${real(valorA)}</span></span>
+    <span class="quebra__parte"><span class="quebra__nome">${rotuloB}</span>
+      <span class="quebra__valor quebra__valor--ouro dinheiro">${real(valorB)}</span></span>
+  </span>`;
 }
 
 function atalho(tela, cor, ic, nome, sub) {
@@ -685,6 +718,13 @@ function aplicarTema(escolha) {
 }
 
 /** Ligar e desligar a planta, guardando a escolha. */
+function mudarDetalheInicio(ligado) {
+  estado.detalheInicio = ligado;
+  guardar('cf:detalheInicio', ligado);
+  desenhar();
+  avisar(ligado ? 'Pronto, tá na tela inicial' : 'Tirei da tela inicial');
+}
+
 function mudarPlanta(ligada) {
   estado.planta = ligada;
   guardar('cf:planta', ligada);
@@ -823,6 +863,7 @@ function linhasDaTela() {
   return `
     <div class="fichas">
       <button class="ficha" onclick="abrirParcelar()">${icone('parcela',15)} Parcelar</button>
+      ${fichaDeCopiar()}
       <button class="ficha ${estado.filtro==='todos'?'ativa':''}" onclick="estado.filtro='todos'; redesenharLista()">Todos</button>
       <button class="ficha ${estado.filtro==='pendentes'?'ativa':''}" onclick="estado.filtro='pendentes'; redesenharLista()">Em aberto</button>
       <button class="ficha ${estado.filtro==='fixos'?'ativa':''}" onclick="estado.filtro='fixos'; redesenharLista()">Fixos</button>
@@ -937,6 +978,82 @@ function virarDevedor(id) {
   avisar(`${v.nome}: ${statusDevedor(v).toLowerCase()}!`);
 }
 
+/* ===================================================================
+   Copiar os fixos do mês anterior
+
+   Isto é da planilha: lá existiam três botões, um por aba, que
+   traziam de uma vez as contas que se repetem todo mês. A conta de
+   quem copiar mora em `dominio.js` e está coberta pelos testes — o
+   redesenho da 4.0 levou junto quem chamava, e só a chamada voltou.
+   =================================================================== */
+const COPIAVEIS = {
+  receitas:  { nome: 'as receitas fixas',  um: 'receita fixa',  copiar: copiarFixasReceitas },
+  despesas:  { nome: 'as despesas fixas',  um: 'despesa fixa',  copiar: copiarFixasDespesas },
+  devedores: { nome: 'os recorrentes',     um: 'recorrente',    copiar: copiarRecorrentesDevedores },
+};
+
+/** Quantos fixos existem lá atrás esperando para serem trazidos. */
+function quantosFixosAntes() {
+  const a = mesAnterior(estado.ano, estado.mes + 1);
+  // O `noMes` daqui de cima só sabe o mês que está na tela. Para
+  // olhar o mês passado a comparação é na mão mesmo.
+  const laAtras = (data) => {
+    if (!data) return false;
+    const [ano, mes] = String(data).split('-').map(Number);
+    return ano === a.ano && mes === a.mes;
+  };
+  if (estado.tela === 'devedores') {
+    return D.devedores.filter((v) => texto(v.recorrente) === 'sim'
+      && laAtras(v.pgtoPrevisto)).length;
+  }
+  const lista = estado.tela === 'receitas' ? D.receitas : D.despesas;
+  return lista.filter((x) => texto(x.fixa) === 'sim' && laAtras(x.data)).length;
+}
+
+function fichaDeCopiar() {
+  if (!COPIAVEIS[estado.tela]) return '';
+  const a = mesAnterior(estado.ano, estado.mes + 1);
+  const quantos = quantosFixosAntes();
+  if (!quantos) return '';
+  return `<button class="ficha" onclick="abrirCopiarFixos()">
+    ${icone('copiar',15)} Trazer de ${MESES[a.mes - 1].slice(0,3).toLowerCase()}</button>`;
+}
+
+function abrirCopiarFixos() {
+  const qual = COPIAVEIS[estado.tela];
+  if (!qual) return;
+  const a = mesAnterior(estado.ano, estado.mes + 1);
+  const rotulo = `${MESES[a.mes - 1].toLowerCase()}`;
+  const quantos = quantosFixosAntes();
+
+  mostrarFolha(`
+    <div class="folha__titulo">Trazer ${qual.nome} de ${rotulo}</div>
+    <p class="explica">
+      Achei <b>${quantos} ${quantos === 1 ? qual.um : qual.nome.replace(/^(as|os) /, '')}</b>
+      em ${rotulo}. Posso repetir ${quantos === 1 ? 'ela' : 'elas'} aqui em
+      ${MESES[estado.mes].toLowerCase()}, no mesmo dia do mês e
+      ${estado.tela === 'devedores' ? 'esperando pagamento' : 'como pendente'}.
+    </p>
+    <p class="explica explica--fraco">
+      ${estado.tela === 'despesas'
+        ? 'Comprovante e observação não vêm junto, que são da conta antiga.'
+        : 'Se você já tinha trazido antes, vai ficar repetido — confere a lista depois.'}
+    </p>
+    <button class="principal" onclick="copiarFixosAgora()">Pode trazer</button>
+    <div class="rodape-form"><button class="secundario" onclick="fecharFolha()">Agora não</button></div>`);
+}
+
+function copiarFixosAgora() {
+  const qual = COPIAVEIS[estado.tela];
+  if (!qual) return;
+  const n = qual.copiar(D, estado.ano, estado.mes + 1);
+  fecharFolha();
+  if (!n) { avisar('Não achei nenhum fixo lá atrás'); return; }
+  mexeuNosDados();
+  desenhar();
+  avisar(n === 1 ? 'Trouxe 1 lançamento' : `Trouxe ${n} lançamentos`);
+}
+
 function telaDevedores() {
   const pagos = D.devedores
     .filter((v) => noMes(v.pgtoPrevisto) && texto(statusDevedor(v)) === 'pago')
@@ -962,11 +1079,12 @@ function linhasDeDevedores() {
     .filter((v) => noMes(v.pgtoPrevisto))
     .filter((v) => combina(v, CAMPOS_BUSCA.devedores, busca))
     .sort((a, b) => (b.pgtoPrevisto || '').localeCompare(a.pgtoPrevisto || ''));
+  const barra = `<div class="fichas">${fichaDeCopiar()}</div>`;
   if (!itens.length) {
     if (busca) return `<div class="vazio">Nada com "${escapar(estado.busca)}" aqui.</div>`;
-    return `<div class="vazio">Ninguém te devendo em ${MESES[estado.mes].toLowerCase()}.<br>Melhor assim!</div>`;
+    return barra + `<div class="vazio">Ninguém te devendo em ${MESES[estado.mes].toLowerCase()}.<br>Melhor assim!</div>`;
   }
-  return itens.map((v) => {
+  return barra + itens.map((v) => {
     const st = statusDevedor(v);
     const cls = st === 'Pago' ? 'selo--ok' : (st === 'Atrasado' ? 'selo--atrasado' : 'selo--pendente');
     return `<div class="item" onclick="abrirDevedor('${v.id}')" role="button" tabindex="0">
@@ -1049,6 +1167,7 @@ function telaPlanta() {
    =================================================================== */
 const SECOES_AJUSTES = {
   voce:      { nome: 'Você',            icone: 'gente',      cor: 'menta' },
+  inicio:    { nome: 'Tela inicial',    icone: 'casa',       cor: 'verde' },
   aparencia: { nome: 'Aparência',       icone: 'sol',        cor: 'ouro' },
   lembrete:  { nome: 'Lembrete',        icone: 'sino',       cor: 'verde' },
   planta:    { nome: 'A plantinha',     icone: 'planta',     cor: 'verde' },
@@ -1062,6 +1181,7 @@ function resumoDaSecao(chave) {
   const c = conexaoGuardada();
   return {
     voce: seuNome(),
+    inicio: estado.detalheInicio ? 'Mostrando o que falta entrar e pagar' : 'Só os totais do mês',
     aparencia: `${TEMAS[temaEscolhido()].nome} · ${CORES[visual.cor].nome.toLowerCase()} · ${FUNDOS[visual.fundo].nome.toLowerCase()}`,
     lembrete: lembrete.ligado ? `Todo dia às ${lembrete.hora}` : 'Desligado',
     planta: estado.planta
@@ -1151,12 +1271,32 @@ async function procurarAtualizacaoAgora() {
   const r = await procurarAgora();
   const frases = {
     baixando: 'Achei versão nova! Estou baixando.',
+    tem: 'Saiu versão nova. Dá uma olhada aqui embaixo.',
     pronta: 'Já tenho a versão nova aqui, esperando.',
     emdia: 'Você já está na mais nova.',
     semrede: 'Não consegui perguntar agora. Sem internet?',
   };
   avisar(frases[r] || frases.emdia);
   if (recado) recado.textContent = frases[r] || 'Eu confiro sozinho toda vez que abro';
+  // 'tem' e 'pronta' fazem nascer o botão de baixar, que só existe
+  // quando há o que baixar.
+  if (r === 'tem' || r === 'pronta') desenhar();
+}
+
+/**
+ * Baixar e instalar no Android, a pedido.
+ *
+ * Isto não acontece mais sozinho. O app conferia a versão, baixava o
+ * APK calado e abria o instalador na abertura seguinte — e não
+ * funcionava, porque o Android ainda pede que a pessoa libere
+ * "instalar apps desconhecidos" na mão. Agora o app só avisa, e quem
+ * decide é quem toca aqui.
+ */
+async function baixarVersaoNova() {
+  avisar('Baixando…');
+  const { baixarEInstalar } = await import('./atualizacao.js');
+  const r = await baixarEInstalar();
+  avisar(r.recado);
 }
 
 function telaAjustes() {
@@ -1215,6 +1355,21 @@ function secaoDeAjuste(chave) {
       </div>
       <p class="explica explica--fraco">É só pra te dar oi na abertura. Nada demais.</p>`,
 
+    inicio: () => `
+      <label class="chave">
+        <input type="checkbox" ${estado.detalheInicio?'checked':''}
+               onchange="mudarDetalheInicio(this.checked)">
+        <span class="chave__trilho"><span class="chave__bola"></span></span>
+        <span class="chave__texto">
+          <div class="chave__nome">Quanto já entrou e quanto ainda falta</div>
+          <div class="chave__sub">Aparece dentro dos cartões de Receitas e Despesas</div>
+        </span>
+      </label>
+      <p class="explica explica--fraco">
+        É o mesmo par que você já vê lá dentro de Receitas e de Despesas. Aqui
+        ele fica na tela inicial, pra você não precisar entrar.
+      </p>`,
+
     aparencia: () => listaDaAparencia(),
     'aparencia/tema': () => parteDoTema(),
     'aparencia/cor': () => parteDaCor(),
@@ -1254,7 +1409,7 @@ function secaoDeAjuste(chave) {
 
     banco: () => {
       const c = conexaoGuardada();
-      const ligado = c && c.ligado;
+      const ligado = Boolean(c && c.ligado);
       return `
       <div class="cartao" style="cursor:default">
         <span class="pastilha ${ligado?'pastilha--verde':'pastilha--ouro'}">${icone(ligado?'subindo':'cartao')}</span>
@@ -1263,8 +1418,24 @@ function secaoDeAjuste(chave) {
           <div class="chave__sub">${ligado ? escapar(c.url) : 'Seus dados não saem daqui'}</div>
         </span>
       </div>
+      ${ligado ? `
+      <div class="recado" id="recadoSincronia">${recadoDaSincronia()}</div>
+      <button class="cartao" style="margin-top:10px" onclick="sincronizarPeloBotao()">
+        <span class="pastilha pastilha--verde">${icone('atualizar')}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">Sincronizar agora</div>
+          <div class="chave__sub">Sobe o que é daqui e traz o que é de lá</div>
+        </span>
+      </button>
+      <button class="cartao" style="margin-top:10px" onclick="testarBancoDosAjustes()">
+        <span class="pastilha pastilha--menta">${icone('check')}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">Testar a conexão</div>
+          <div class="chave__sub">Só confere se o endereço e o token funcionam</div>
+        </span>
+      </button>` : ''}
       <button class="cartao" style="margin-top:10px" onclick="trocarDeBanco()">
-        <span class="pastilha pastilha--menta">${icone('engrenagem')}</span>
+        <span class="pastilha pastilha--ouro">${icone('engrenagem')}</span>
         <span class="cartao__meio">
           <div class="chave__nome">${ligado ? 'Trocar de banco' : 'Ligar um banco'}</div>
           <div class="chave__sub">Para usar o app em mais de um aparelho</div>
@@ -1273,6 +1444,7 @@ function secaoDeAjuste(chave) {
       <p class="explica explica--fraco">
         O banco é seu e eu não vejo o que tem dentro. Ele serve pra você abrir o
         app no celular e no computador com os mesmos lançamentos.
+        ${ligado ? 'No celular, puxar a tela inicial para baixo também sincroniza.' : ''}
       </p>`;
     },
 
@@ -1300,9 +1472,19 @@ function secaoDeAjuste(chave) {
         <span class="pastilha pastilha--menta">${icone('subindo')}</span>
         <span class="cartao__meio">
           <div class="chave__nome">Versão ${VERSAO}</div>
-          <div class="chave__sub" id="recadoDaVersao">Eu confiro sozinho toda vez que abro</div>
+          <div class="chave__sub" id="recadoDaVersao">${temVersaoNova()
+            ? `Saiu a ${escapar(versaoLaFora())}`
+            : 'Eu confiro sozinho toda vez que abro'}</div>
         </span>
       </div>
+      ${temVersaoNova() && noCelular() ? `
+      <button class="cartao" style="margin-top:10px" onclick="baixarVersaoNova()">
+        <span class="pastilha pastilha--verde">${icone('atualizar')}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">Baixar a ${escapar(versaoLaFora())}</div>
+          <div class="chave__sub">Eu trago o arquivo e o Android pergunta se pode instalar</div>
+        </span>
+      </button>` : ''}
       <button class="cartao" style="margin-top:10px" onclick="procurarAtualizacaoAgora()">
         <span class="pastilha pastilha--ouro">${icone('atualizar')}</span>
         <span class="cartao__meio">
@@ -1310,6 +1492,11 @@ function secaoDeAjuste(chave) {
           <div class="chave__sub">Se acabou de sair versão nova e você não quer esperar</div>
         </span>
       </button>
+      ${noCelular() ? `<p class="explica explica--fraco">
+        No celular eu não instalo nada sozinho: eu só te aviso, e você decide.
+        Na primeira vez o Android ainda vai te pedir pra liberar "instalar apps
+        desconhecidos" — é uma vez só.
+      </p>` : ''}
       <div class="cartao" style="cursor:default;margin-top:10px">
         <span class="pastilha pastilha--ouro">${icone('cartao')}</span>
         <span class="cartao__meio">
@@ -1996,6 +2183,62 @@ function ligarMascaras(onde) {
  * para a tela de conexão não voltar a aparecer toda abertura para
  * quem já disse que não quer banco nenhum.
  */
+/* ---------------- a sincronia na tela ----------------
+   A regra aqui é uma só: nada de falha calada. A sincronia já ficou
+   quatro versões quebrada porque o erro ia para o console, e console
+   ninguém abre no celular. Agora todo resultado vira texto na seção
+   Banco, e o que o botão dispara vira também um aviso na tela.
+   ------------------------------------------------------------------ */
+function recadoDaSincronia() {
+  const e = estadoDaSincronia();
+  if (!e.ligada) return 'Desligada: seus dados ficam só aqui.';
+  if (e.rodando) return 'Sincronizando…';
+  if (e.recado) return escapar(e.recado);
+  return e.em ? `Última vez ${contarTempo(e.em)}.` : 'Ainda não sincronizou nenhuma vez.';
+}
+
+function pintarRecadoDaSincronia() {
+  const alvo = $('recadoSincronia');
+  if (!alvo) return;
+  const e = estadoDaSincronia();
+  alvo.textContent = '';
+  alvo.innerHTML = recadoDaSincronia();
+  alvo.classList.toggle('recado--bom', e.tom === 'bom');
+  alvo.classList.toggle('recado--ruim', e.tom === 'ruim');
+}
+quandoSincroniaMudar(pintarRecadoDaSincronia);
+
+async function sincronizarPeloBotao() {
+  avisar('Sincronizando…');
+  const r = await sincronizarAgora();
+  avisar(r.recado || (r.ok ? 'Pronto' : 'Não rolou'));
+}
+
+async function testarBancoDosAjustes() {
+  const { url, token } = lerConfiguracao();
+  avisar('Conferindo…');
+  const r = await testarConexao(url, token);
+  avisar(r.ok ? 'Conexão certa, pode sincronizar' : `Não deu: ${r.erro}`);
+}
+
+/**
+ * O aviso de puxar-para-sincronizar. Quem mede o dedo é o
+ * sincroniaApp; aqui só se desenha o que ele manda.
+ */
+export function mostrarPuxao(distancia, pronto) {
+  let el = $('puxao');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'puxao';
+    el.className = 'puxao';
+    document.body.appendChild(el);
+  }
+  if (!distancia) { el.classList.remove('puxao--visivel'); return; }
+  el.classList.add('puxao--visivel');
+  el.style.setProperty('--puxada', `${distancia}px`);
+  el.textContent = pronto ? 'Solta que eu sincronizo' : 'Puxa mais um pouco';
+}
+
 function conexaoGuardada() {
   if (estaLigada()) {
     const c = lerConfiguracao();
@@ -2079,7 +2322,22 @@ function conectar() {
   const token = pegar('con-token').trim();
   if (!url) { avisar('Falta o endereço do banco'); return; }
   if (!token) { avisar('Falta o token'); return; }
-  gravarConfiguracao({ url: normalizarEndereco(url), token, em: '' });
+  conferirEligar(normalizarEndereco(url), token);
+}
+
+/**
+ * Antes era só gravar e seguir. Um token errado passava batido e a
+ * pessoa só descobria dias depois, quando o outro aparelho não via
+ * nada — foi exatamente o tipo de silêncio que quebrou a sincronia.
+ */
+async function conferirEligar(url, token) {
+  avisar('Conferindo o banco…');
+  const r = await testarConexao(url, token);
+  if (!r.ok) {
+    avisar(`Não consegui entrar: ${r.erro}`);
+    return;
+  }
+  gravarConfiguracao({ url, token, marca: '', em: '' });
   guardar('cf:soAqui', false);
   perguntarDoBackup();
 }
@@ -3022,7 +3280,8 @@ Object.assign(window, {
   estado, visual, guardarVisual, preencherAmostrasDeArquivo,
   conexaoGuardada, mostrarEntrada, esconderEntrada, normalizarEndereco,
   explicarEscudos, blocoDeEscudos, explicarAjuste, listaDaAparencia,
-  procurarAtualizacaoAgora,
+  procurarAtualizacaoAgora, baixarVersaoNova,
+  abrirCopiarFixos, copiarFixosAgora, sincronizarPeloBotao, testarBancoDosAjustes,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
@@ -3030,7 +3289,7 @@ Object.assign(window, {
   fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
   mudarCor, mudarDesfoque, mudarFundo, mudarHoraDoLembrete, mudarLembrete, mudarMes,
-  mudarNome, mudarOpacidade, mudarPlanta, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
+  mudarNome, mudarOpacidade, mudarPlanta, mudarDetalheInicio, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
   salvar, salvarDevedor, salvarRendimento, tirarFoto, trocarFonte, trocarTema,
   trocarTipoNovo, usarSoNesteAparelho, virarDevedor, virarStatus, voltarDosAjustes, voltarParaHoje,
 });
@@ -3047,6 +3306,7 @@ export function iniciarTela(dados) {
   aplicarFonte(fonteEscolhida());
   aplicarVisual();
   estado.planta = lerGuardado('cf:planta', true);
+  estado.detalheInicio = lerGuardado('cf:detalheInicio', false);
   lembrete.ligado = lerGuardado('cf:lembrete', false);
   lembrete.hora = lerGuardado('cf:lembreteHora', '20:00');
   estado.ano = hoje().getFullYear();

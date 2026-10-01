@@ -161,6 +161,14 @@ button,input,select { font-family:inherit; }
 .cartao__meio{flex:1;min-width:0}
 .cartao__valor{display:block;font-size:23px;font-weight:700;margin-top:3px;letter-spacing:-0.02em}
 .cartao__valor--vermelho{color:var(--vermelho)}
+/* O par "já entrou / ainda falta" dentro do cartão da tela inicial.
+   Fica embaixo do número grande, menor, sem virar cartão novo. */
+.quebra{display:flex;gap:18px;margin-top:8px}
+.quebra__parte{display:block;min-width:0}
+.quebra__nome{display:block;font-size:10.5px;font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--apagado)}
+.quebra__valor{display:block;font-size:14px;font-weight:600;margin-top:1px}
+.quebra__valor--menta{color:var(--menta)} .quebra__valor--ouro{color:var(--ouro)}
 .planta__nome{display:flex;font-size:16.5px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .planta__selo{background:var(--ouro-fundo);color:var(--ouro-frente);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
 .planta__sub{display:block;font-size:12.5px;color:var(--apagado);margin-top:3px}
@@ -292,6 +300,22 @@ textarea:focus{border-color:var(--menta);background:var(--cartao-alto);
 .conta__valor--menos{color:var(--vermelho)}
 .explica{font-size:14.5px;line-height:1.5;color:var(--texto);margin:12px 0}
 .explica--fraco{color:var(--apagado);font-size:13.5px}
+
+/* O recado da sincronia: ele precisa ser lido, então tem fundo
+   próprio — sobre uma foto de fundo, texto solto some. */
+.recado{margin-top:10px;padding:11px 14px;border-radius:14px;background:var(--cartao);
+  font-size:13.5px;line-height:1.45;color:var(--apagado)}
+.recado--bom{color:var(--menta)}
+.recado--ruim{color:var(--ouro)}
+
+/* Puxar para sincronizar. Ele desce junto com o dedo, e some sozinho
+   quando o dedo sai. */
+.puxao{position:fixed;left:50%;top:0;z-index:55;pointer-events:none;
+  transform:translate(-50%, calc(var(--puxada, 0px) - 100%));
+  background:var(--cartao-alto);color:var(--texto);border-radius:0 0 999px 999px;
+  padding:9px 20px 11px;font-size:13.5px;box-shadow:0 6px 18px rgba(0,0,0,.35);
+  opacity:0;transition:opacity 160ms}
+.puxao--visivel{opacity:1}
 .estados{display:grid;gap:8px;margin:12px 0}
 .estado{display:flex;gap:11px;align-items:flex-start;background:var(--fundo);border-radius:12px;padding:11px 13px}
 .estado__bola{width:11px;height:11px;border-radius:50%;flex:none;margin-top:5px}

@@ -20,13 +20,18 @@ import { registrarAcesso } from './planta.js';
 import * as lembretes from './lembretes.js';
 import { atualizarWidget } from './widget.js';
 import { cuidarDaAtualizacao } from './atualizacao.js';
-import { sincronizar, estaLigada } from './sincronia.js';
+import { estaLigada } from './sincronia.js';
+import {
+  configurarSincronia, sincronizarAgora, agendarSincronia,
+  ligarGestosDeSincronia,
+} from './sincroniaApp.js';
 import { normalizar } from './armazenamento.js';
-import { iniciarTela, redesenharTudo, quandoMexer, avisar } from './tela.js';
+import {
+  iniciarTela, redesenharTudo, quandoMexer, avisar, mostrarPuxao,
+} from './tela.js';
 import { abrirAbertura, passo, fecharAbertura, falharAbertura } from './abertura.js';
 
 let dados = null;
-let sincroniaMarcada = null;
 
 /**
  * Chamado pela tela sempre que alguma coisa muda. Grava de imediato e
@@ -36,24 +41,28 @@ function aoMexer(novos) {
   dados = novos;
   atualizarWidget(dados);
   armazenamento.salvar(dados).catch((e) => armazenamento.relatarFalha(e));
-  if (!estaLigada()) return;
-  clearTimeout(sincroniaMarcada);
-  sincroniaMarcada = setTimeout(() => sincronizarEmSilencio(), 4000);
+  agendarSincronia();
 }
 
-async function sincronizarEmSilencio() {
-  try {
-    const r = await sincronizar(dados);
-    if (r?.dados) {
-      // Depois de juntar, o arquivo é outro: normalizar de novo é o
-      // que garante que a tela receba tudo no formato que ela espera.
-      dados = normalizar(r.dados);
-      await armazenamento.salvar(dados);
-      redesenharTudo(dados);
-    }
-  } catch (e) {
-    console.warn('Sincronia:', e?.message || e);
-  }
+/**
+ * O que fazer com o que voltou do banco.
+ *
+ * Passar pelo `normalizar` é o que faz o depois-da-sincronia ser igual
+ * ao depois-de-reabrir: sem isso o objeto recém-juntado entra cru e
+ * alguns números ficam num estado que só a abertura limparia.
+ *
+ * `registrarAcesso` roda de novo porque a sequência da planta sai da
+ * união dos dias dos dois aparelhos — sem recalcular, o cartão ficaria
+ * mostrando o número de antes da sincronia. Repetir é seguro: no mesmo
+ * dia não duplica.
+ */
+async function aplicarDadosDaSincronia(juntos) {
+  dados = normalizar(juntos);
+  await armazenamento.salvar(dados);
+  registrarAcesso(dados);
+  lembretes.reagendar(dados);
+  atualizarWidget(dados);
+  redesenharTudo(dados);
 }
 
 /** Primeira carga: tenta a semente que vem junto com o pacote. */
@@ -90,8 +99,16 @@ async function iniciar() {
   const acesso = registrarAcesso(dados);
 
   passo('juntando', 55);
+  configurarSincronia({
+    pegarDados: () => dados,
+    aplicarDados: aplicarDadosDaSincronia,
+  });
   quandoMexer(aoMexer);
   iniciarTela(dados);
+  ligarGestosDeSincronia({
+    aoPuxar: (distancia, pronto) => mostrarPuxao(distancia, pronto),
+    aoSoltar: () => mostrarPuxao(0, false),
+  });
 
   // Uma falha de gravação não pode morrer no console: no celular o
   // armazenamento do app é o único lugar onde os dados existem.
@@ -114,7 +131,7 @@ async function iniciar() {
 
   // Estes dois ficam para depois da abertura de propósito: são coisas
   // de rede, e ninguém deve esperar a internet para ver o saldo.
-  if (estaLigada()) sincronizarEmSilencio();
+  if (estaLigada()) sincronizarAgora({ silenciosa: true });
   cuidarDaAtualizacao();
 }
 

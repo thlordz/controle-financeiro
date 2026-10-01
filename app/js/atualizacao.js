@@ -4,11 +4,19 @@
 // No computador, quem faz tudo é o processo principal do Electron:
 // aqui só perguntamos se já tem versão nova esperando.
 //
-// No Android é diferente. O sistema nunca instala nada calado — ele
-// sempre pergunta — então o melhor que dá para fazer é deixar o
-// arquivo pronto sem a pessoa perceber e, na próxima vez que ela
-// abrir o app, mostrar a pergunta uma única vez.
+// No Android, nada acontece sozinho. Já foi assim: o app baixava o
+// APK calado e, na abertura seguinte, mandava a pergunta do
+// instalador. Na prática aquilo não funcionou — o Android ainda exige
+// que a pessoa libere "instalar apps desconhecidos" na mão, e quando
+// ela não libera o ciclo trava sem dizer nada. Thiago pediu para
+// tirar o automático, e ficou só isto: o app confere o número da
+// versão e, se tiver saído uma nova, escreve isso nos Ajustes. Baixar
+// e instalar passou a ser um toque dele, nunca uma decisão minha.
 // =========================================================
+
+// Onde fica anotado o número que vimos lá fora, para os Ajustes
+// mostrarem sem ter de perguntar ao GitHub de novo.
+const CHAVE_VERSAO_LA_FORA = 'cf:versaoLaFora';
 
 import { VERSAO } from './versao.js';
 
@@ -23,7 +31,6 @@ const REPO = 'thlordz/controle-financeiro';
 // seguinte — foi o que aconteceu no lançamento da 4.0.
 const ESPERA_ENTRE_BUSCAS = 10 * 60 * 1000;
 const CHAVE_ULTIMA_BUSCA = 'cf:ultimaBuscaDeVersao';
-const CHAVE_JA_OFERECIDA = 'cf:versaoJaOferecida';
 
 function plugin() {
   return window.Capacitor?.Plugins?.ControleAtualizacao || null;
@@ -88,11 +95,14 @@ async function lerDoGitHub(p, chave, caminho) {
 }
 
 /**
- * Procura versão nova e baixa o APK, em silêncio. Só olha uma vez por
- * dia: quem abre o app cinco vezes no dia não gasta internet cinco
- * vezes.
+ * Só OLHA: pergunta ao GitHub qual é a versão lá fora e devolve o
+ * pacote correspondente, sem baixar nada. São alguns kilobytes.
+ *
+ * A separação entre olhar e baixar é o coração da mudança: antes as
+ * duas coisas moravam na mesma função, e por isso conferir a versão
+ * já significava trazer três megabytes e armar um instalador.
  */
-async function procurarNoAndroid(p, agoraMesmo = false) {
+async function olharNoAndroid(p, agoraMesmo = false) {
   const agora = Date.now();
   const ultima = Number(localStorage.getItem(CHAVE_ULTIMA_BUSCA) || 0);
   if (!agoraMesmo && agora - ultima < ESPERA_ENTRE_BUSCAS) return null;
@@ -108,52 +118,65 @@ async function procurarNoAndroid(p, agoraMesmo = false) {
   const manifesto = await lerDoGitHub(
     p, chave, `/repos/${REPO}/releases/assets/${ficha.id}`
   );
-  if (!maisNovaQue(manifesto.versao, VERSAO)) return null;
-
   const pacote = (manifesto.plataformas?.android || [])[0];
   if (!pacote) return null;
 
-  await p.baixarApk({
-    url: `https://api.github.com/repos/${REPO}/releases/assets/${pacote.anexo}`,
-    token: chave,
-    soma: pacote.soma,
-    versao: manifesto.versao,
-  });
-  return { versao: manifesto.versao };
+  localStorage.setItem(CHAVE_VERSAO_LA_FORA, manifesto.versao);
+  if (!maisNovaQue(manifesto.versao, VERSAO)) return null;
+  return { versao: manifesto.versao, pacote, chave };
 }
 
 /**
- * A rotina inteira do Android: primeiro oferece o que já está baixado,
- * depois sai procurando o que vier a seguir.
- *
- * A oferta acontece uma vez por versão. Se a pessoa disser não, o app
- * não insiste a cada abertura — o aviso continua nos Ajustes.
+ * Baixa e abre o instalador. Só é chamada por um toque na tela — a
+ * abertura do app nunca chega aqui.
  */
-async function cuidarDoAndroid(p) {
+export async function baixarEInstalar() {
+  const p = plugin();
+  if (!p) return { ok: false, recado: 'Aqui no computador eu me atualizo sozinho.' };
   try {
     const pronta = await p.pendente();
-    if (pronta?.versao) {
-      if (maisNovaQue(pronta.versao, VERSAO)) {
-        if (localStorage.getItem(CHAVE_JA_OFERECIDA) !== pronta.versao) {
-          localStorage.setItem(CHAVE_JA_OFERECIDA, pronta.versao);
-          await p.instalar();
-        }
-        return;
-      }
-      // Já foi instalada: o arquivo não serve mais para nada.
-      await p.esquecer();
+    if (pronta?.versao && maisNovaQue(pronta.versao, VERSAO)) {
+      await p.instalar();
+      return { ok: true, recado: 'Abri o instalador do Android.' };
     }
-    await procurarNoAndroid(p);
+    const achado = await olharNoAndroid(p, true);
+    if (!achado) return { ok: false, recado: 'Você já está na mais nova.' };
+
+    await p.baixarApk({
+      url: `https://api.github.com/repos/${REPO}/releases/assets/${achado.pacote.anexo}`,
+      token: achado.chave,
+      soma: achado.pacote.soma,
+      versao: achado.versao,
+    });
+    await p.instalar();
+    return { ok: true, recado: `Baixei a ${achado.versao} e abri o instalador.` };
   } catch (e) {
-    console.warn('Atualização: não deu certo desta vez —', e?.message || e);
+    return { ok: false, recado: `Não consegui: ${e?.message || e}` };
   }
 }
 
-/** Ligada na abertura do app. Não segura nada: roda por fora. */
+/** O número que vimos lá fora na última conferida, ou ''. */
+export function versaoLaFora() {
+  try { return localStorage.getItem(CHAVE_VERSAO_LA_FORA) || ''; } catch { return ''; }
+}
+
+/** Tem versão nova esperando um toque? */
+export function temVersaoNova() {
+  const lf = versaoLaFora();
+  return Boolean(lf && maisNovaQue(lf, VERSAO));
+}
+
+/**
+ * Ligada na abertura do app. No Android ela agora só confere o
+ * número; no computador quem cuida de tudo é o Electron.
+ */
 export function cuidarDaAtualizacao() {
   const p = plugin();
-  if (!p) return; // no computador quem cuida é o Electron
-  setTimeout(() => cuidarDoAndroid(p), 4000);
+  if (!p) return;
+  setTimeout(() => {
+    olharNoAndroid(p).catch((e) =>
+      console.warn('Atualização: não deu para conferir —', e?.message || e));
+  }, 4000);
 }
 
 /**
@@ -182,8 +205,10 @@ export async function procurarAgora() {
   try {
     const pronta = await p.pendente();
     if (pronta?.versao && maisNovaQue(pronta.versao, VERSAO)) return 'pronta';
-    const achou = await procurarNoAndroid(p, true);
-    return achou ? 'baixando' : 'emdia';
+    // No Android, procurar é só olhar. Baixar é decisão de quem toca
+    // no botão, e ela tem um botão só para isso.
+    const achou = await olharNoAndroid(p, true);
+    return achou ? 'tem' : 'emdia';
   } catch {
     return 'semrede';
   }
