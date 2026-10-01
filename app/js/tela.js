@@ -61,6 +61,7 @@ const estado = {
   busca: '',
   planta: true,   // reposto do que ficou guardado, logo abaixo
   detalheInicio: false,  // os números de "já entrou / ainda falta" na tela inicial
+  faturaInicio: false,   // o cartão da fatura na tela inicial
   filtro: 'todos',
   selecao: new Set(),
   ajuste: null,    // seção aberta dentro dos Ajustes
@@ -135,7 +136,12 @@ function painel() {
     despesasDoMes: p.despesasDoMes,
     pago: p.pago,
     faltaPagar: p.faltaPagar,
+    // `fatura` é o nome curto que a tela de Despesas usa há tempos.
+    // Os outros dois entram com o nome da planilha: a atual é só o que
+    // está confirmado, a prevista soma o que ainda pode entrar.
     fatura: p.faturaTotalPrevista,
+    faturaAtual: p.faturaAtual,
+    faturaTotalPrevista: p.faturaTotalPrevista,
     faturaPaga: p.faturaPaga,
   };
 }
@@ -387,6 +393,7 @@ function telaInicio(p) {
           ${quebra('Já paguei', p.pago, 'Ainda falta', p.faltaPagar)}
         </span>
       </button>
+      ${cartaoDaFatura(p)}
     </div>
 
     <div class="titulo-secao">Atalhos</div>
@@ -396,6 +403,32 @@ function telaInicio(p) {
       ${atalho('devedores','ouro','gente','Devedores', real(devedoresPendentes())+' a receber')}
       ${atalho('investir','menta','porco','Investir', porcentagemDaMeta()+' da meta')}
     </div>`;
+}
+
+/**
+ * A fatura do cartão na tela inicial.
+ *
+ * Os três números são os mesmos da planilha, com os mesmos nomes: a
+ * fatura atual é o que está confirmado (Pendente), a prevista soma o
+ * que ainda pode entrar (Aguardando) e a paga é o que já saiu da
+ * conta. Era um painel fixo na versão antiga; aqui é opcional, porque
+ * quem não usa cartão não precisa de um cartão a mais na tela.
+ */
+function cartaoDaFatura(p) {
+  if (!estado.faturaInicio) return '';
+  return `<button class="cartao" onclick="ir('despesas')">
+    <span class="pastilha pastilha--ouro">${icone('cartao')}</span>
+    <span class="cartao__meio">
+      <span class="rotulo">Fatura atual</span>
+      <span class="cartao__valor dinheiro">${real(p.faturaAtual)}</span>
+      <span class="quebra">
+        <span class="quebra__parte"><span class="quebra__nome">Total prevista</span>
+          <span class="quebra__valor quebra__valor--ouro dinheiro">${real(p.faturaTotalPrevista)}</span></span>
+        <span class="quebra__parte"><span class="quebra__nome">Já paguei</span>
+          <span class="quebra__valor quebra__valor--menta dinheiro">${real(p.faturaPaga)}</span></span>
+      </span>
+    </span>
+  </button>`;
 }
 
 /**
@@ -484,6 +517,23 @@ function linhaDaConta(nome, valor, sinal, total) {
   return `<div class="conta__linha${classe}">
     <span class="conta__nome">${nome}</span>
     <span class="conta__valor${cor} dinheiro">${sinal || ''}${real(Math.abs(valor))}</span>
+  </div>`;
+}
+
+/**
+ * A mesma linha, para o que se CONTA em vez de se somar em reais.
+ *
+ * O quadro dos escudos reaproveitava a linha de dinheiro, e por isso
+ * dizia que um escudo vale "+R$ 1,00" e que o limite é "R$ 3,00".
+ * Escudo não é dinheiro: é quantidade.
+ */
+function linhaDeContagem(nome, quantos, sinal, total) {
+  const classe = total ? ' conta__linha--total' : '';
+  const cor = sinal === '+' ? ' conta__valor--mais' : (sinal === '−' ? ' conta__valor--menos' : '');
+  const n = Math.abs(quantos);
+  return `<div class="conta__linha${classe}">
+    <span class="conta__nome">${nome}</span>
+    <span class="conta__valor${cor}">${sinal || ''}${n} ${n === 1 ? 'escudo' : 'escudos'}</span>
   </div>`;
 }
 
@@ -725,6 +775,13 @@ function mudarDetalheInicio(ligado) {
   guardar('cf:detalheInicio', ligado);
   desenhar();
   avisar(ligado ? 'Pronto, tá na tela inicial' : 'Tirei da tela inicial');
+}
+
+function mudarFaturaInicio(ligado) {
+  estado.faturaInicio = ligado;
+  guardar('cf:faturaInicio', ligado);
+  desenhar();
+  avisar(ligado ? 'A fatura tá na tela inicial' : 'Tirei a fatura de lá');
 }
 
 function mudarPlanta(ligada) {
@@ -1179,7 +1236,7 @@ function resumoDaSecao(chave) {
   const c = conexaoGuardada();
   return {
     voce: seuNome(),
-    inicio: estado.detalheInicio ? 'Mostrando o que falta entrar e pagar' : 'Só os totais do mês',
+    inicio: resumoDaTelaInicial(),
     aparencia: `${TEMAS[temaEscolhido()].nome} · ${CORES[visual.cor].nome.toLowerCase()} · ${FUNDOS[visual.fundo].nome.toLowerCase()}`,
     lembrete: lembrete.ligado ? `Todo dia às ${lembrete.hora}` : 'Desligado',
     planta: estado.planta
@@ -1190,6 +1247,13 @@ function resumoDaSecao(chave) {
     sobre: `Versão ${VERSAO}`,
     apagar: 'Some com tudo e recomeça',
   }[chave];
+}
+
+function resumoDaTelaInicial() {
+  const liga = [];
+  if (estado.detalheInicio) liga.push('o que falta entrar e pagar');
+  if (estado.faturaInicio) liga.push('a fatura');
+  return liga.length ? `Mostrando ${liga.join(' e ')}` : 'Só os totais do mês';
 }
 
 function irNoAjuste(secao) {
@@ -1241,12 +1305,12 @@ function explicarEscudos() {
       acontecido.
     </p>
     <div class="conta">
-      ${linhaDaConta(`A cada ${DIAS_POR_ESCUDO} dias seguidos`, 1, '+')}
-      ${linhaDaConta('Cada dia esquecido gasta', 1, '−')}
-      ${linhaDaConta('Mais do que isso eu não guardo', MAX_ESCUDOS, '', true)}
+      ${linhaDeContagem(`A cada ${DIAS_POR_ESCUDO} dias seguidos`, 1, '+')}
+      ${linhaDeContagem('Cada dia esquecido gasta', 1, '−')}
+      ${linhaDeContagem('Mais do que isso eu não guardo', MAX_ESCUDOS, '', true)}
     </div>
     <p class="explica">
-      Você tem <b>${tem === 0 ? 'nenhum' : tem}</b> agora.
+      Você tem <b>${tem === 0 ? 'nenhum escudo' : (tem === 1 ? '1 escudo' : `${tem} escudos`)}</b> agora.
     </p>
     <p class="explica explica--fraco">
       Eles não são infinitos de propósito: com escudo demais a sequência
@@ -1363,9 +1427,18 @@ function secaoDeAjuste(chave) {
           <div class="chave__sub">Aparece dentro dos cartões de Receitas e Despesas</div>
         </span>
       </label>
+      <label class="chave" style="margin-top:10px">
+        <input type="checkbox" ${estado.faturaInicio?'checked':''}
+               onchange="mudarFaturaInicio(this.checked)">
+        <span class="chave__trilho"><span class="chave__bola"></span></span>
+        <span class="chave__texto">
+          <div class="chave__nome">A fatura do cartão</div>
+          <div class="chave__sub">A atual, a prevista e o que você já pagou</div>
+        </span>
+      </label>
       <p class="explica explica--fraco">
-        É o mesmo par que você já vê lá dentro de Receitas e de Despesas. Aqui
-        ele fica na tela inicial, pra você não precisar entrar.
+        São os mesmos números que já existem dentro de Receitas e de Despesas.
+        Aqui eles ficam na tela inicial, pra você não precisar entrar.
       </p>`,
 
     aparencia: () => listaDaAparencia(),
@@ -3319,7 +3392,7 @@ Object.assign(window, {
   fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
   mudarCor, mudarDesfoque, mudarFundo, mudarHoraDoLembrete, mudarLembrete, mudarMes,
-  mudarNome, mudarOpacidade, mudarPlanta, mudarDetalheInicio, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
+  mudarNome, mudarOpacidade, mudarPlanta, mudarDetalheInicio, mudarFaturaInicio, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
   salvar, salvarDevedor, salvarRendimento, tirarFoto, trocarFonte, trocarTema,
   trocarTipoNovo, usarSoNesteAparelho, virarDevedor, virarStatus, voltarDosAjustes, voltarParaHoje,
 });
@@ -3337,6 +3410,7 @@ export function iniciarTela(dados) {
   aplicarVisual();
   estado.planta = lerGuardado('cf:planta', true);
   estado.detalheInicio = lerGuardado('cf:detalheInicio', false);
+  estado.faturaInicio = lerGuardado('cf:faturaInicio', false);
   lembrete.ligado = lerGuardado('cf:lembrete', false);
   lembrete.hora = lerGuardado('cf:lembreteHora', '20:00');
   estado.ano = hoje().getFullYear();
