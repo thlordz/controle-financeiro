@@ -943,6 +943,13 @@ function vazioOuNadaAchado() {
   return `<div class="vazio">${MESES[estado.mes]} está vazio por aqui.<br>Bora lançar o primeiro?</div>`;
 }
 
+/** Verde quando quitado, azul quando ainda não caiu na fatura, ouro no resto. */
+function classeDoSelo(x, bom) {
+  if (bom) return 'selo--ok';
+  if (texto(x.status) === 'aguardando') return 'selo--aguardando';
+  return 'selo--pendente';
+}
+
 function linhaLancamento(x, recebe) {
   const s = texto(x.status);
   const bom = recebe ? s === 'recebido' : s === 'pago';
@@ -954,9 +961,11 @@ function linhaLancamento(x, recebe) {
     </label>
     <span class="item__linha1">
       <span class="item__data">${bonito(x.data)}</span>
-      <button class="selo selo--clicavel ${bom?'selo--ok':'selo--pendente'}"
+      <button class="selo selo--clicavel ${classeDoSelo(x, bom)}"
         onclick="event.stopPropagation(); virarStatus('${x.id}')"
-        title="Toca aqui pra marcar como pago">${x.status||''}</button>
+        title="${noCredito(x) && !recebe
+          ? 'Toca pra girar: pago, aguardando, pendente'
+          : 'Toca aqui pra marcar como pago'}">${x.status||''}</button>
       <span class="item__valor dinheiro">${real(x.valor)}</span>
     </span>
     <span class="item__nome">${escapar(x.descricao)||'(sem descrição)'}</span>
@@ -1013,11 +1022,31 @@ function barraDeSelecao(recebe) {
  * o dia inteiro. Aguardando continua existindo no formulário, onde há
  * espaço para escolher com calma.
  */
+/** É uma despesa no crédito? Aí existe um terceiro estado. */
+const noCredito = (x) => String(x?.formaPgto || '').toLowerCase().includes('crédito');
+
+/**
+ * O giro do crédito: Pendente → Pago → Aguardando → Pendente.
+ *
+ * "Aguardando" é a compra que ainda não entrou na fatura — ela conta
+ * na prevista, mas não na atual. Fora do crédito esse estado não quer
+ * dizer nada, então ali o selo continua alternando entre dois.
+ *
+ * A ordem começa por Pago de propósito: marcar como pago é o que se
+ * faz o dia inteiro, e mudar isso quebraria o dedo de quem já está
+ * acostumado. Os outros dois passos vêm depois.
+ */
+const GIRO_CREDITO = { pendente: 'Pago', pago: 'Aguardando', aguardando: 'Pendente' };
+
 function virarStatus(id) {
   const x = achar(id);
   if (!x) return;
-  const quitado = D.receitas.includes(x) ? 'Recebido' : 'Pago';
-  x.status = texto(x.status) === texto(quitado) ? 'Pendente' : quitado;
+  if (noCredito(x) && !D.receitas.includes(x)) {
+    x.status = GIRO_CREDITO[texto(x.status)] || 'Pago';
+  } else {
+    const quitado = D.receitas.includes(x) ? 'Recebido' : 'Pago';
+    x.status = texto(x.status) === texto(quitado) ? 'Pendente' : quitado;
+  }
   mexeuNosDados();
   desenhar();
   avisar(x.descricao ? `${x.descricao}: ${x.status.toLowerCase()}!` : x.status);

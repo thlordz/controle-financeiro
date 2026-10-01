@@ -81,6 +81,31 @@ if [ -d "build/win-unpacked/resources/app" ]; then
     | gzip -n -9 > "$TAR_WINDOWS"
 fi
 
+# O Windows completo, para quem ainda não tem o app.
+#
+# O `Controle-Financeiro.exe` sozinho não roda: ele é o electron.exe
+# puro e precisa da pasta `resources` ao lado. Ele continua na release
+# porque é dele que o atualizador se serve, mas quem está instalando
+# pela primeira vez precisa do conjunto — e durante vários meses não
+# havia conjunto nenhum para baixar.
+#
+# A pasta `dados` fica de fora por regra: ela é do dono do pendrive e
+# nunca entra em pacote.
+ZIP_WINDOWS="$PASTA_TMP/Controle-Financeiro-Windows.zip"
+if [ -d "build/win-unpacked" ]; then
+  python3 - "$ZIP_WINDOWS" <<'FIM'
+import os, sys, zipfile
+raiz = 'build/win-unpacked'
+with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+    for pasta, _, arquivos in os.walk(raiz):
+        if '/resources/app/dados' in pasta.replace(os.sep, '/'):
+            continue
+        for a in sorted(arquivos):
+            caminho = os.path.join(pasta, a)
+            z.write(caminho, os.path.relpath(caminho, raiz))
+FIM
+fi
+
 APPIMAGE_ACHADO="$(ls -1t build/*.AppImage 2>/dev/null | head -1)"
 DEB_ACHADO="$(ls -1t build/*.deb 2>/dev/null | head -1)"
 
@@ -89,6 +114,7 @@ PACOTES=(
   "linux|${DEB_ACHADO:-build/nao-existe}|controle-financeiro.deb"
   "windows|$TAR_WINDOWS|app.tar.gz"
   "windows|build/win-unpacked/Controle Financeiro.exe|Controle-Financeiro.exe"
+  "nenhuma|${ZIP_WINDOWS:-build/nao-existe}|Controle-Financeiro-Windows.zip"
   "android|movel/Controle Financeiro.apk|Controle-Financeiro.apk"
 )
 
@@ -236,6 +262,11 @@ versao, linhas = sys.argv[1], sys.argv[2:]
 plataformas = {}
 for linha in linhas:
     plataforma, nome, id_anexo, soma, tamanho = linha.split('|')
+    # 'nenhuma' é o anexo que existe só para gente baixar na mão — o
+    # zip do Windows. Ele não entra no manifesto porque nenhum app
+    # deve puxar 115 MB para se atualizar: para isso há o app.tar.gz.
+    if plataforma == 'nenhuma':
+        continue
     plataformas.setdefault(plataforma, []).append({
         'nome': nome, 'anexo': int(id_anexo), 'soma': soma, 'tamanho': int(tamanho),
     })

@@ -7,6 +7,9 @@
   --ouro:#B5830E;   --sobre-ouro:#FFFFFF;   --ouro-fundo:#FBEBC4;    --ouro-frente:#77520A;
   --vermelho:#B3261E; --vermelho-fundo:#FBDAD6; --vermelho-frente:#8C1D18;
   --verde:#1F7A45;  --sobre-verde:#FFFFFF;  --verde-fundo:#CDEFD8;   --verde-frente:#0F5C30;
+  /* O azul não entra na personalização: ele é o "ainda não caiu na
+     fatura", e precisa dizer isso em qualquer cor que o app esteja. */
+  --azul-fundo:#D8E6FC; --azul-frente:#1A4C8A;
 
   --barra-rolagem:#CAC6BC; --barra-rolagem-viva:#ACA79B;
 
@@ -43,6 +46,7 @@
   --ouro:#E3B341;   --sobre-ouro:#2A1F02;   --ouro-fundo:#4A3A12;    --ouro-frente:#E3B341;
   --vermelho:#FF8F86; --vermelho-fundo:#4E1B18; --vermelho-frente:#FF8F86;
   --verde:#6FD99B;  --sobre-verde:#062713;  --verde-fundo:#12402A;   --verde-frente:#6FD99B;
+  --azul-fundo:#17304E; --azul-frente:#A8C8FF;
 
   --barra-rolagem:#3D3A33; --barra-rolagem-viva:#524E45;
 
@@ -64,6 +68,7 @@
   --ouro:#E3B341;   --sobre-ouro:#2A1F02;   --ouro-fundo:#4A3A12;    --ouro-frente:#E3B341;
   --vermelho:#FF8F86; --vermelho-fundo:#4E1B18; --vermelho-frente:#FF8F86;
   --verde:#6FD99B;  --sobre-verde:#062713;  --verde-fundo:#12402A;   --verde-frente:#6FD99B;
+  --azul-fundo:#17304E; --azul-frente:#A8C8FF;
 
   --barra-rolagem:#3D3A33; --barra-rolagem-viva:#524E45;
 
@@ -201,6 +206,7 @@ button,input,select { font-family:inherit; }
 .selo--pendente{background:var(--ouro-fundo);color:var(--ouro-frente)}
 .selo--ok{background:var(--verde-fundo);color:var(--verde-frente)}
 .selo--atrasado{background:var(--vermelho-fundo);color:var(--vermelho-frente)}
+.selo--aguardando{background:var(--azul-fundo);color:var(--azul-frente)}
 .vazio{text-align:center;color:var(--apagado);padding:50px 20px;font-size:14.5px}
 
 .fichas{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
