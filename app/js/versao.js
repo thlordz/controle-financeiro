@@ -3,7 +3,7 @@
 // É o número que aparece no rodapé dos Ajustes e no alto da tela. Os
 // scripts de publicação leem daqui para carimbar o APK, então basta
 // mudar esta linha antes de publicar.
-export const VERSAO = '4.5';
+export const VERSAO = '4.6';
 
 /**
  * A versão que deu escudos de presente, e quantos.

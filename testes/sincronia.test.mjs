@@ -380,13 +380,55 @@ await teste('marca de exclusão de id antigo não apaga lançamento alheio', asy
 
 await teste('aparelho já reetiquetado não reetiqueta de novo', async () => {
   const banco = bancoFalso();
+  // Os dois `d1` precisam ser gastos DIFERENTES: é essa diferença que
+  // diz ao app que os ids antigos vêm de mundos separados. Dois `d1`
+  // idênticos são, por definição, o mesmo lançamento.
   await sincronizar({ cliente: banco, dados: aparelho({
-    despesas: [{ id: 'd1', atualizadoEm: T(2) }] }), desde: '' });
-  const celular = aparelho({ despesas: [{ id: 'd1', atualizadoEm: T(3) }] });
+    despesas: [{ id: 'd1', valor: 100, descricao: 'Aluguel', atualizadoEm: T(2) }] }), desde: '' });
+  const celular = aparelho({
+    despesas: [{ id: 'd1', valor: 7, descricao: 'Café', atualizadoEm: T(3) }] });
   const a = await sincronizar({ cliente: banco, dados: celular, desde: '' });
   igual(a.resumo.reetiquetados, 1, 'primeira vez reetiqueta');
   const b = await sincronizar({ cliente: banco, dados: a.dados, desde: a.marca });
   igual(b.resumo.reetiquetados, 0, 'segunda vez não mexe mais');
+});
+
+await teste('dois aparelhos do MESMO arquivo não duplicam a vida inteira', async () => {
+  const banco = bancoFalso();
+  // O caso real: a planilha foi importada no PC e o mesmo backup foi
+  // levado para o celular. Os dois têm d1/d2/d3 para os MESMOS gastos.
+  const mesmos = () => [
+    { id: 'd1', data: '2026-01-05', valor: 100, descricao: 'Aluguel', atualizadoEm: T(2) },
+    { id: 'd2', data: '2026-01-10', valor: 80,  descricao: 'Luz',     atualizadoEm: T(2) },
+    { id: 'd3', data: '2026-01-12', valor: 60,  descricao: 'Água',    atualizadoEm: T(2) }
+  ];
+  const pc = aparelho({ despesas: mesmos() });
+  await sincronizar({ cliente: banco, dados: pc, desde: '' });
+
+  const celular = aparelho({ despesas: mesmos() });
+  const s2 = await sincronizar({ cliente: banco, dados: celular, desde: '' });
+
+  igual(s2.resumo.reetiquetados, 0, 'nada podia ser reetiquetado');
+  igual(s2.dados.despesas.length, 3, 'continuam três, não seis');
+});
+
+await teste('mesmo arquivo com uma edição de um lado ainda é o mesmo mundo', async () => {
+  const banco = bancoFalso();
+  const base = (extra = {}) => [
+    { id: 'd1', data: '2026-01-05', valor: 100, descricao: 'Aluguel', atualizadoEm: T(2) },
+    { id: 'd2', data: '2026-01-10', valor: 80,  descricao: 'Luz',     atualizadoEm: T(2) },
+    { id: 'd3', data: '2026-01-12', valor: 60,  descricao: 'Água',    atualizadoEm: T(2) },
+    { id: 'd4', data: '2026-01-20', valor: 40,  descricao: 'Gás',     atualizadoEm: T(2), ...extra }
+  ];
+  await sincronizar({ cliente: banco, dados: aparelho({ despesas: base() }), desde: '' });
+
+  // no celular o gás foi corrigido para 45: um de quatro difere
+  const celular = aparelho({ despesas: base({ valor: 45, atualizadoEm: T(4) }) });
+  const s2 = await sincronizar({ cliente: banco, dados: celular, desde: '' });
+
+  igual(s2.resumo.reetiquetados, 0, 'uma edição não vira mundo novo');
+  igual(s2.dados.despesas.length, 4, 'continuam quatro');
+  igual(s2.dados.despesas.find((d) => d.id === 'd4').valor, 45, 'e a correção vence');
 });
 
 console.log(`\n${passou} passaram, ${falhou} falharam\n`);

@@ -158,6 +158,66 @@ export function comandosDeSubida(dados, desde) {
 const ID_LEGADO = /^[rdvi]\d+$/;
 
 /**
+ * A cara de um lançamento, sem o id: data, valor e o texto que o
+ * identifica. Dois lançamentos com a mesma cara são o mesmo
+ * lançamento, mesmo que o id diga outra coisa.
+ */
+function cara(item, tipo) {
+  const n = (v) => String(v ?? '').trim().toLowerCase();
+  const dinheiro = Number(item?.valor);
+  const valor = Number.isFinite(dinheiro) ? dinheiro.toFixed(2) : '';
+  if (tipo === 'devedores') {
+    return [n(item?.nome), n(item?.pgtoPrevisto), valor].join('|');
+  }
+  return [n(item?.data), valor, n(item?.descricao)].join('|');
+}
+
+/**
+ * Os ids antigos daqui e os do banco são do MESMO mundo?
+ *
+ * Esta é a pergunta que decide tudo o que vem abaixo, e ela tem duas
+ * respostas possíveis, as duas reais:
+ *
+ *   - **Mundos diferentes.** O celular e o PC começaram cada um do
+ *     zero e criaram, cada um, o seu `d1` para gastos diferentes.
+ *     Aqui é preciso reetiquetar, senão um apaga o outro.
+ *   - **Mesmo mundo.** Os dois aparelhos nasceram do mesmo arquivo —
+ *     a planilha importada, um backup copiado de um para o outro — e
+ *     o `d1` de cá é o MESMO gasto que o `d1` de lá. Aqui
+ *     reetiquetar é o desastre: os 665 lançamentos subiriam de novo
+ *     com ids novos e tudo apareceria em dobro.
+ *
+ * Quem responde são os ids que existem dos dois lados. Se eles
+ * apontam para os mesmos lançamentos, é o mesmo mundo. Sem nenhum id
+ * em comum não dá para saber, e aí vale a resposta antiga, que é a
+ * cautelosa: tratar como mundos diferentes.
+ */
+export function mesmoMundoDeIds(dados, remoto) {
+  let comuns = 0;
+  let iguais = 0;
+
+  for (const tipo of LISTAS) {
+    const laFora = new Map();
+    for (const item of remoto?.[tipo] || []) {
+      if (ID_LEGADO.test(item?.id || '')) laFora.set(item.id, item);
+    }
+    if (!laFora.size) continue;
+    for (const item of dados?.[tipo] || []) {
+      if (!ID_LEGADO.test(item?.id || '')) continue;
+      const par = laFora.get(item.id);
+      if (!par) continue;
+      comuns++;
+      if (cara(item, tipo) === cara(par, tipo)) iguais++;
+    }
+  }
+
+  // A folga existe porque um lançamento pode ter sido editado de um
+  // lado depois da cópia. Um punhado de diferenças não transforma o
+  // mesmo mundo em outro; metade delas, sim.
+  return comuns > 0 && iguais >= comuns * 0.7;
+}
+
+/**
  * Reetiqueta os lançamentos de id antigo deste aparelho.
  *
  * Por que isto existe: os ids eram sequenciais por lista, então o
@@ -207,9 +267,13 @@ export async function sincronizar({ cliente, dados, desde = '' }) {
   // configuração do aparelho: assim, se alguém apagar a configuração e
   // reconectar, o app não reetiqueta de novo o que já está no banco —
   // o que duplicaria tudo.
+  //
+  // Mas só quando os ids antigos dos dois lados forem de mundos
+  // diferentes. Dois aparelhos nascidos do mesmo arquivo compartilham
+  // os ids, e reetiquetar ali duplicaria a vida inteira de uma vez.
   const bancoJaTemCoisa = LISTAS.some((t) => remoto[t].length > 0);
   let reetiquetagem = { trocados: 0 };
-  if (!dados.sincroniaIniciada && bancoJaTemCoisa) {
+  if (!dados.sincroniaIniciada && bancoJaTemCoisa && !mesmoMundoDeIds(dados, remoto)) {
     reetiquetagem = reetiquetarLegados(dados);
   }
 
