@@ -33,6 +33,7 @@ import {
 } from './sincroniaApp.js';
 import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 import { temVersaoNova, versaoLaFora } from './atualizacao.js';
+import { salvarArquivo } from './arquivos.js';
 
 /** No aparelho mesmo, não no navegador nem no Electron. */
 const noCelular = () => Boolean(window.Capacitor?.isNativePlatform?.());
@@ -2380,7 +2381,10 @@ function perguntarDoBackup() {
 function escolherArquivoDeBackup() {
   const campo = document.createElement('input');
   campo.type = 'file';
-  campo.accept = 'application/json,.json';
+  // No celular o filtro atrapalha: um .json que veio do Drive ou do
+  // WhatsApp costuma chegar anunciado como application/octet-stream,
+  // e aí ele aparece apagado na lista, impossível de escolher.
+  campo.accept = noCelular() ? '' : 'application/json,.json';
   campo.onchange = async () => {
     const arquivo = campo.files?.[0];
     if (!arquivo) return;
@@ -2407,7 +2411,19 @@ function comecarDoZero() {
 /* ===================================================================
    Backup: guardar e restaurar
    =================================================================== */
-function baixarBackup() {
+/**
+ * Guardar um backup, nos três lugares onde o app roda.
+ *
+ * Antes isto era um link de download inventado aqui, e no Android um
+ * link de download não faz nada: o botão existia, não dava erro e não
+ * salvava nada. Quem sabe fazer isso direito é o `arquivos.js` — ele
+ * abre a caixa de diálogo no computador e a folha de compartilhar no
+ * celular, que é como um arquivo sai de um app no Android.
+ *
+ * Devolve se deu certo, porque tem quem precise saber: o backup antes
+ * de apagar tudo não pode mentir.
+ */
+async function baixarBackup() {
   const conteudo = JSON.stringify({
     versao: 1,
     salvoEm: new Date().toISOString(),
@@ -2416,13 +2432,17 @@ function baixarBackup() {
     devedores: D.devedores, investimento: D.investimento,
     logAcesso: D.logAcesso,
   }, null, 1);
-  const url = URL.createObjectURL(new Blob([conteudo], { type: 'application/json' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `controle-financeiro-${new Date().toISOString().slice(0,10)}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  avisar('Backup salvo no seu aparelho');
+  const nome = `controle-financeiro-${new Date().toISOString().slice(0,10)}.json`;
+  try {
+    const foi = await salvarArquivo(
+      new Blob([conteudo], { type: 'application/json' }), nome);
+    if (!foi) { avisar('Você fechou sem salvar'); return false; }
+    avisar(noCelular() ? 'Pronto, escolhe onde guardar' : 'Backup guardado');
+    return true;
+  } catch (e) {
+    avisar(`Não consegui guardar: ${e?.message || e}`);
+    return false;
+  }
 }
 
 /**
@@ -2446,7 +2466,10 @@ function restaurarBackup(lido) {
 function pedirBackupParaRestaurar() {
   const campo = document.createElement('input');
   campo.type = 'file';
-  campo.accept = 'application/json,.json';
+  // No celular o filtro atrapalha: um .json que veio do Drive ou do
+  // WhatsApp costuma chegar anunciado como application/octet-stream,
+  // e aí ele aparece apagado na lista, impossível de escolher.
+  campo.accept = noCelular() ? '' : 'application/json,.json';
   campo.onchange = async () => {
     const arquivo = campo.files?.[0];
     if (!arquivo) return;
@@ -2546,11 +2569,18 @@ function apagarTudoPasso2() {
     </div>`);
 }
 
-function baixarBackupAntesDeApagar() {
-  baixarBackup();
+/**
+ * Este é o único lugar onde o resultado do backup muda alguma coisa:
+ * ele destrava o caminho para apagar tudo. Antes marcava "guardado"
+ * sem esperar nem conferir — e no Android, onde o backup não
+ * funcionava, isso virava permissão para apagar a vida inteira com
+ * uma cópia que nunca existiu.
+ */
+async function baixarBackupAntesDeApagar() {
+  const foi = await baixarBackup();
+  if (!foi) return;
   backupFeitoAgora = true;
   apagarTudoPasso2();
-  avisar('Guardado! Agora sim');
 }
 
 /** Terceira tela: escrever a palavra. Quem escreve, pensa. */
