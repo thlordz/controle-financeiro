@@ -116,6 +116,15 @@ if [ -d "$PC" ]; then
   chmod +x "$PC/.novo.AppImage.tmp"
   mv -f "$PC/.novo.AppImage.tmp" "$PC/Controle Financeiro.AppImage"
   echo "AppImage do PC atualizado."
+
+  # Os ícones da gaveta não vivem dentro do AppImage: eles foram
+  # copiados para ~/.local/share/icons na instalação e ficam lá. Trocar
+  # só o programa deixava o ícone velho na tela por tempo indefinido —
+  # o do PC ficou duas semanas atrás do que o app mostrava por dentro.
+  if [ -x instalar-atalho-linux.sh ]; then
+    ./instalar-atalho-linux.sh "$PC/Controle Financeiro.AppImage" >/dev/null 2>&1 \
+      && echo "Ícones do PC atualizados."
+  fi
 fi
 
 if [ -n "$P" ]; then

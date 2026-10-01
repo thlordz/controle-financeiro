@@ -133,13 +133,18 @@ export async function sincronizarAgora({ silenciosa = false } = {}) {
 
     await aplicarDados(r.dados);
 
-    const { adicionados, atualizados, apagados, enviados, reetiquetados } = r.resumo;
+    const { adicionados, atualizados, apagados, enviados,
+            reetiquetados, resgatados } = r.resumo;
     const partes = [];
     if (adicionados) partes.push(`${adicionados} chegaram`);
     if (atualizados) partes.push(`${atualizados} mudaram`);
     if (apagados) partes.push(`${apagados} sumiram`);
     if (enviados) partes.push(`${enviados} subiram`);
     if (reetiquetados) partes.push(`${reetiquetados} reetiquetados`);
+    // Este merece nome próprio: é lançamento que estava no banco e
+    // tinha ficado invisível aqui. Ver "resgatei 5" é diferente de
+    // ver "5 chegaram".
+    if (resgatados) partes.push(`resgatei ${resgatados} que faltavam`);
     dizer(partes.length ? `Pronto · ${partes.join(', ')}.` : 'Tudo em dia, nada novo.', 'bom');
     return { ok: true, recado, silenciosa };
   } catch (e) {

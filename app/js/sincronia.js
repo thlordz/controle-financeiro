@@ -100,6 +100,81 @@ export async function baixar(cliente, desde) {
   return { remoto, maisNovo };
 }
 
+/**
+ * A rede de segurança: o que está no banco e não está aqui?
+ *
+ * A marca de última visita é um corte no tempo — "me dá o que mudou
+ * depois disto" — e ela tinha um buraco que custou caro. O carimbo
+ * que viaja com o lançamento é a hora em que ELE foi editado, não a
+ * hora em que chegou ao banco. Um gasto lançado no celular dia 29 e
+ * subido dia 30 entra no banco carimbado com o dia 29; se o
+ * computador já tinha passado por ali no dia 30, aquele corte deixa o
+ * gasto para trás **para sempre**. Foi exatamente isso que sumiu com
+ * cinco lançamentos: quatro despesas e um devedor.
+ *
+ * Em vez de reescrever a regra do corte, que é o que decide quem
+ * vence um empate, esta função pergunta uma coisa simples e barata
+ * depois de cada rodada: a lista de ids que o banco tem. Se aparecer
+ * algum que não existe aqui, ele é buscado. São poucos bytes por
+ * sincronia, e o buraco deixa de existir — inclusive os que já foram
+ * abertos antes desta versão.
+ */
+export async function conferirSobras(cliente, dados) {
+  const [r] = await cliente.executar(
+    `SELECT tipo, id FROM registros WHERE removido = 0 AND tipo != 'estado'`);
+
+  // O que foi apagado aqui não volta pela porta dos fundos: a marca de
+  // exclusão ainda não subiu, mas ela manda.
+  const apagadosAqui = new Set(
+    (dados.removidos || []).map((m) => `${m.tipo}|${m.id}`));
+
+  const faltando = [];
+  for (const tipo of LISTAS) {
+    const daqui = new Set((dados[tipo] || []).map((x) => x?.id));
+    for (const linha of r?.linhas || []) {
+      if (linha.tipo !== tipo) continue;
+      if (daqui.has(linha.id)) continue;
+      if (apagadosAqui.has(`${linha.tipo}|${linha.id}`)) continue;
+      faltando.push(linha);
+    }
+  }
+  if (!faltando.length) return null;
+
+  // Busca o conteúdo só dos que faltam, em blocos, para o pedido não
+  // virar um texto gigante quando o buraco for grande.
+  const remoto = {
+    receitas: [], despesas: [], devedores: [], investimento: [],
+    removidos: [], logAcesso: [], recordes: {}, config: {}, cicloInicio: '',
+    diasProtegidos: [], escudoBonus: 0, escudoBonusVersao: ''
+  };
+  let achados = 0;
+
+  for (let i = 0; i < faltando.length; i += 100) {
+    const bloco = faltando.slice(i, i + 100);
+    const [resposta] = await cliente.executar({
+      sql: `SELECT tipo, id, conteudo, atualizado_em FROM registros
+              WHERE removido = 0 AND (${bloco.map(() => '(tipo = ? AND id = ?)').join(' OR ')})`,
+      args: bloco.flatMap((l) => [l.tipo, l.id])
+    });
+    for (const linha of resposta?.linhas || []) {
+      anotarCarimbo(linha.atualizado_em);
+      let conteudo = null;
+      try { conteudo = JSON.parse(linha.conteudo || 'null'); } catch { conteudo = null; }
+      if (!conteudo || !LISTAS.includes(linha.tipo)) continue;
+      // Aporte e retirada são recalculados a partir de Despesas e
+      // Receitas, e o arquivo local os descarta ao abrir. Trazer de
+      // volta faria esta conferência achar o mesmo "buraco" para
+      // sempre, a cada sincronia.
+      if (linha.tipo === 'investimento'
+          && String(conteudo.categoria || '').trim().toLowerCase() !== 'rendimento') continue;
+      remoto[linha.tipo].push(conteudo);
+      achados++;
+    }
+  }
+
+  return achados ? { remoto, achados } : null;
+}
+
 /** Monta as instruções de subida do que mudou aqui depois de `desde`. */
 export function comandosDeSubida(dados, desde) {
   const corte = quando(desde);
@@ -175,7 +250,7 @@ function cara(item, tipo) {
 /**
  * Os ids antigos daqui e os do banco são do MESMO mundo?
  *
- * Esta é a pergunta que decide tudo o que vem abaixo, e ela tem duas
+ * Esta é a pergunta que decide se vale reetiquetar, e ela tem duas
  * respostas possíveis, as duas reais:
  *
  *   - **Mundos diferentes.** O celular e o PC começaram cada um do
@@ -192,19 +267,14 @@ function cara(item, tipo) {
  * em comum não dá para saber, e aí vale a resposta antiga, que é a
  * cautelosa: tratar como mundos diferentes.
  */
-export function mesmoMundoDeIds(dados, remoto) {
+export function mesmoMundoDeIds(dados, laFora) {
   let comuns = 0;
   let iguais = 0;
 
   for (const tipo of LISTAS) {
-    const laFora = new Map();
-    for (const item of remoto?.[tipo] || []) {
-      if (ID_LEGADO.test(item?.id || '')) laFora.set(item.id, item);
-    }
-    if (!laFora.size) continue;
     for (const item of dados?.[tipo] || []) {
       if (!ID_LEGADO.test(item?.id || '')) continue;
-      const par = laFora.get(item.id);
+      const par = laFora.get(`${tipo}|${item.id}`);
       if (!par) continue;
       comuns++;
       if (cara(item, tipo) === cara(par, tipo)) iguais++;
@@ -215,6 +285,45 @@ export function mesmoMundoDeIds(dados, remoto) {
   // lado depois da cópia. Um punhado de diferenças não transforma o
   // mesmo mundo em outro; metade delas, sim.
   return comuns > 0 && iguais >= comuns * 0.7;
+}
+
+/**
+ * Busca no banco só os ids antigos que existem AQUI.
+ *
+ * Perguntar direto ao banco, em vez de olhar o que veio na descida,
+ * é o que torna a resposta confiável. A descida é incremental: ela
+ * traz o que mudou desde a última visita, e os lançamentos antigos
+ * quase nunca estão lá. Um aparelho que perdeu a marca de "já
+ * sincronizei" — porque o arquivo foi restaurado de um backup, por
+ * exemplo — olhava para uma descida sem nenhum id antigo, concluía
+ * "mundos diferentes" e reetiquetava os PRÓPRIOS lançamentos, que já
+ * estavam no banco. O resultado era tudo em dobro, e em silêncio.
+ */
+async function legadosDoBanco(cliente, dados) {
+  const pedidos = [];
+  for (const tipo of LISTAS) {
+    for (const item of dados?.[tipo] || []) {
+      if (ID_LEGADO.test(item?.id || '')) pedidos.push([tipo, item.id]);
+    }
+  }
+  const achados = new Map();
+  if (!pedidos.length) return achados;
+
+  for (let i = 0; i < pedidos.length; i += 100) {
+    const bloco = pedidos.slice(i, i + 100);
+    const [r] = await cliente.executar({
+      sql: `SELECT tipo, id, conteudo FROM registros
+              WHERE removido = 0 AND (${bloco.map(() => '(tipo = ? AND id = ?)').join(' OR ')})`,
+      args: bloco.flat()
+    });
+    for (const linha of r?.linhas || []) {
+      try {
+        const c = JSON.parse(linha.conteudo || 'null');
+        if (c) achados.set(`${linha.tipo}|${linha.id}`, c);
+      } catch { /* linha estragada: conta como ausente */ }
+    }
+  }
+  return achados;
 }
 
 /**
@@ -273,8 +382,9 @@ export async function sincronizar({ cliente, dados, desde = '' }) {
   // os ids, e reetiquetar ali duplicaria a vida inteira de uma vez.
   const bancoJaTemCoisa = LISTAS.some((t) => remoto[t].length > 0);
   let reetiquetagem = { trocados: 0 };
-  if (!dados.sincroniaIniciada && bancoJaTemCoisa && !mesmoMundoDeIds(dados, remoto)) {
-    reetiquetagem = reetiquetarLegados(dados);
+  if (!dados.sincroniaIniciada && bancoJaTemCoisa) {
+    const laFora = await legadosDoBanco(cliente, dados);
+    if (!mesmoMundoDeIds(dados, laFora)) reetiquetagem = reetiquetarLegados(dados);
   }
 
   const { dados: juntos, resumo } = juntar(dados, remoto);
@@ -288,6 +398,17 @@ export async function sincronizar({ cliente, dados, desde = '' }) {
 
   juntos.sincroniaIniciada = true;
 
+  // Depois de subir, a varredura: se o banco tiver algo que não está
+  // aqui, ele vem agora, independentemente de carimbo.
+  let resgatados = 0;
+  const sobras = await conferirSobras(cliente, juntos);
+  if (sobras) {
+    const r2 = juntar(juntos, sobras.remoto);
+    Object.assign(juntos, r2.dados);
+    juntos.sincroniaIniciada = true;
+    resgatados = sobras.achados;
+  }
+
   // A marca precisa passar também pelo que ACABAMOS de subir. Sem
   // isso, um aparelho que semeia um banco vazio continuaria achando
   // que nunca sincronizou — e na visita seguinte se trataria como
@@ -300,7 +421,10 @@ export async function sincronizar({ cliente, dados, desde = '' }) {
 
   return {
     dados: juntos,
-    resumo: { ...resumo, enviados: comandos.length, reetiquetados: reetiquetagem.trocados },
+    resumo: {
+      ...resumo, enviados: comandos.length,
+      reetiquetados: reetiquetagem.trocados, resgatados
+    },
     marca
   };
 }

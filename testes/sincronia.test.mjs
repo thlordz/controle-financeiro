@@ -34,6 +34,24 @@ function bancoFalso() {
         const args = (typeof c === 'string' ? [] : c.args) || [];
         if (/^CREATE/i.test(sql.trim())) { continue; }
         if (/^SELECT/i.test(sql.trim())) {
+          // A varredura pergunta de duas formas: a lista de ids que o
+          // banco tem, e depois o conteúdo de alguns deles. Sem
+          // entender as duas, o banco de mentira devolvia vazio e o
+          // teste passava por engano.
+          if (/removido = 0 AND tipo != 'estado'/.test(sql)) {
+            saida.push({ colunas: [], linhas: [...linhas.values()]
+              .filter((l) => !l.removido && l.tipo !== 'estado')
+              .map((l) => ({ tipo: l.tipo, id: l.id })) });
+            continue;
+          }
+          if (/\(tipo = \? AND id = \?\)/.test(sql)) {
+            const pedidos = new Set();
+            for (let i = 0; i < args.length; i += 2) pedidos.add(`${args[i]}:${args[i+1]}`);
+            saida.push({ colunas: [], linhas: [...linhas.values()]
+              .filter((l) => !l.removido && pedidos.has(`${l.tipo}:${l.id}`))
+              .map((l) => ({ ...l })) });
+            continue;
+          }
           const desde = args[0] || '';
           const achadas = [...linhas.values()]
             .filter((l) => (l.atualizado_em || '') > desde)
@@ -429,6 +447,59 @@ await teste('mesmo arquivo com uma edição de um lado ainda é o mesmo mundo', 
   igual(s2.resumo.reetiquetados, 0, 'uma edição não vira mundo novo');
   igual(s2.dados.despesas.length, 4, 'continuam quatro');
   igual(s2.dados.despesas.find((d) => d.id === 'd4').valor, 45, 'e a correção vence');
+});
+
+console.log('\no buraco do carimbo velho');
+
+await teste('lançamento subido com carimbo antigo não some para quem já passou', async () => {
+  const banco = bancoFalso();
+
+  // O PC sincroniza no dia 10 e fica com a marca lá na frente.
+  const pc = aparelho({ despesas: [
+    { id: 'p1', valor: 50, descricao: 'Do PC', atualizadoEm: T(10) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+
+  // O celular tinha um gasto lançado no dia 2 e só agora consegue
+  // subir. Ele entra no banco carimbado com o dia 2 — ATRÁS da marca
+  // que o PC já guardou.
+  const celular = aparelho({ despesas: [
+    { id: 'c1', valor: 7, descricao: 'Do celular, lançado antes', atualizadoEm: T(2) } ] });
+  await sincronizar({ cliente: banco, dados: celular, desde: '' });
+
+  // Sem a varredura, o corte "mudou depois da marca" pularia o c1 e
+  // ele ficaria invisível para o PC para sempre.
+  const s3 = await sincronizar({ cliente: banco, dados: pc, desde: s1.marca });
+  const veio = s3.dados.despesas.some((d) => d.id === 'c1');
+  igual(veio, true, 'o gasto do celular tinha de chegar no PC');
+  igual(s3.dados.despesas.length, 2, 'os dois convivem');
+});
+
+await teste('a varredura não ressuscita o que foi apagado aqui', async () => {
+  const banco = bancoFalso();
+  const pc = aparelho({ despesas: [
+    { id: 'x1', valor: 10, descricao: 'Some', atualizadoEm: T(2) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+
+  // Apagado aqui, com a marca ainda não subida.
+  const depois = aparelho({
+    despesas: [],
+    removidos: [{ tipo: 'despesas', id: 'x1', em: T(5) }]
+  });
+  depois.sincroniaIniciada = true;
+  const s2 = await sincronizar({ cliente: banco, dados: depois, desde: s1.marca });
+  igual(s2.dados.despesas.length, 0, 'não podia voltar');
+});
+
+await teste('a varredura não acha buraco quando não há', async () => {
+  const banco = bancoFalso();
+  const pc = aparelho({ despesas: [
+    { id: 'a1', valor: 10, descricao: 'Um', atualizadoEm: T(2) },
+    { id: 'a2', valor: 20, descricao: 'Dois', atualizadoEm: T(3) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+  igual(s1.resumo.resgatados, 0, 'nada a resgatar na primeira');
+  const s2 = await sincronizar({ cliente: banco, dados: s1.dados, desde: s1.marca });
+  igual(s2.resumo.resgatados, 0, 'nem na segunda');
+  igual(s2.dados.despesas.length, 2, 'e nada duplicou');
 });
 
 console.log(`\n${passou} passaram, ${falhou} falharam\n`);
