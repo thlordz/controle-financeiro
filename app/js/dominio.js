@@ -227,15 +227,30 @@ export function totaisDevedores(lista) {
 // ---------------------------------------------------------
 
 /**
+ * Quem já está lá, para não vir de novo.
+ *
+ * Copiar os fixos é um botão, e botão se aperta duas vezes — por
+ * dúvida, por engano, por toque repetido no celular. Antes a segunda
+ * vez trazia tudo outra vez: dez despesas viravam vinte, e desfazer
+ * era apagar uma a uma. A cópia é sempre a mesma coisa (mesma
+ * descrição, mesmo valor, mesmo dia), então reconhecer o que já veio
+ * é simples, e a operação passa a poder ser repetida à vontade.
+ */
+function jaEstaNoMes(lista, campoData, ano, mes, molde, chave) {
+  const alvo = mesmaDiaNoMes(molde[campoData], ano, mes);
+  return lista.some((x) =>
+    x[campoData] === alvo &&
+    Number(x.valor) === Number(molde.valor) &&
+    texto(x[chave]) === texto(molde[chave]));
+}
+
+/**
  * Porte de Receita_CopiarFixasMesAnterior().
  * Copia as receitas marcadas como fixas do mês anterior, sempre
  * como "Pendente". Devolve quantas foram criadas.
  */
 export function copiarFixasReceitas(dados, ano, mes) {
-  const anterior = mesAnterior(ano, mes);
-  const origem = dados.receitas.filter(
-    (r) => texto(r.fixa) === 'sim' && noMes(r.data, anterior.ano, anterior.mes)
-  );
+  const origem = fixasReceitasACopiar(dados, ano, mes);
 
   for (const r of origem) {
     dados.receitas.push(carimbar({
@@ -248,16 +263,22 @@ export function copiarFixasReceitas(dados, ano, mes) {
   return origem.length;
 }
 
+/** As que viriam, se o botão fosse apertado agora. */
+export function fixasReceitasACopiar(dados, ano, mes) {
+  const anterior = mesAnterior(ano, mes);
+  return (dados.receitas || []).filter(
+    (r) => texto(r.fixa) === 'sim' && noMes(r.data, anterior.ano, anterior.mes)
+        && !jaEstaNoMes(dados.receitas, 'data', ano, mes, r, 'descricao')
+  );
+}
+
 /**
  * Porte de Despesa_CopiarFixasMesAnterior().
  * Copia só valor, descrição, categoria e forma de pagamento — o VBA
  * deliberadamente não leva comprovante nem observação.
  */
 export function copiarFixasDespesas(dados, ano, mes) {
-  const anterior = mesAnterior(ano, mes);
-  const origem = dados.despesas.filter(
-    (d) => texto(d.fixa) === 'sim' && noMes(d.data, anterior.ano, anterior.mes)
-  );
+  const origem = fixasDespesasACopiar(dados, ano, mes);
 
   for (const d of origem) {
     dados.despesas.push(carimbar({
@@ -276,16 +297,22 @@ export function copiarFixasDespesas(dados, ano, mes) {
   return origem.length;
 }
 
+/** As que viriam, se o botão fosse apertado agora. */
+export function fixasDespesasACopiar(dados, ano, mes) {
+  const anterior = mesAnterior(ano, mes);
+  return (dados.despesas || []).filter(
+    (d) => texto(d.fixa) === 'sim' && noMes(d.data, anterior.ano, anterior.mes)
+        && !jaEstaNoMes(dados.despesas, 'data', ano, mes, d, 'descricao')
+  );
+}
+
 /**
  * Porte de Devedores_CopiarRecorrentesMesAnterior().
  * Copia a linha inteira, move o vencimento e zera pagamento,
  * forma e comprovante — o status se recalcula sozinho.
  */
 export function copiarRecorrentesDevedores(dados, ano, mes) {
-  const anterior = mesAnterior(ano, mes);
-  const origem = dados.devedores.filter(
-    (v) => texto(v.recorrente) === 'sim' && noMes(v.pgtoPrevisto, anterior.ano, anterior.mes)
-  );
+  const origem = recorrentesACopiar(dados, ano, mes);
 
   for (const v of origem) {
     dados.devedores.push(carimbar({
@@ -298,6 +325,16 @@ export function copiarRecorrentesDevedores(dados, ano, mes) {
     }));
   }
   return origem.length;
+}
+
+/** Os que viriam, se o botão fosse apertado agora. */
+export function recorrentesACopiar(dados, ano, mes) {
+  const anterior = mesAnterior(ano, mes);
+  return (dados.devedores || []).filter(
+    (v) => texto(v.recorrente) === 'sim'
+        && noMes(v.pgtoPrevisto, anterior.ano, anterior.mes)
+        && !jaEstaNoMes(dados.devedores, 'pgtoPrevisto', ano, mes, v, 'nome')
+  );
 }
 
 // ---------------------------------------------------------

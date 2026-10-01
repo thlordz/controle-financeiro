@@ -20,7 +20,8 @@ import { svgDaPlanta, svgDoEscudoMini } from './plantaSvg.js';
 import {
   novoId, carimbar, agora,
   copiarFixasReceitas, copiarFixasDespesas, copiarRecorrentesDevedores,
-  mesAnterior,
+  fixasReceitasACopiar, fixasDespesasACopiar, recorrentesACopiar,
+  mesAnterior, proximoMes,
 } from './dominio.js';
 import { hoje, paraISO, formatarData } from './util.js';
 import { VERSAO } from './versao.js';
@@ -993,22 +994,18 @@ const COPIAVEIS = {
   devedores: { nome: 'os recorrentes',     um: 'recorrente',    copiar: copiarRecorrentesDevedores },
 };
 
-/** Quantos fixos existem lá atrás esperando para serem trazidos. */
+/**
+ * Quantos fixos ainda FALTAM ser trazidos.
+ *
+ * Conta o que viria de verdade, não o que existe lá atrás: quem já
+ * foi trazido não entra. Assim a ficha some sozinha quando não há
+ * mais nada a fazer, em vez de ficar oferecendo uma cópia vazia.
+ */
 function quantosFixosAntes() {
-  const a = mesAnterior(estado.ano, estado.mes + 1);
-  // O `noMes` daqui de cima só sabe o mês que está na tela. Para
-  // olhar o mês passado a comparação é na mão mesmo.
-  const laAtras = (data) => {
-    if (!data) return false;
-    const [ano, mes] = String(data).split('-').map(Number);
-    return ano === a.ano && mes === a.mes;
-  };
-  if (estado.tela === 'devedores') {
-    return D.devedores.filter((v) => texto(v.recorrente) === 'sim'
-      && laAtras(v.pgtoPrevisto)).length;
-  }
-  const lista = estado.tela === 'receitas' ? D.receitas : D.despesas;
-  return lista.filter((x) => texto(x.fixa) === 'sim' && laAtras(x.data)).length;
+  const mes = estado.mes + 1;
+  if (estado.tela === 'devedores') return recorrentesACopiar(D, estado.ano, mes).length;
+  if (estado.tela === 'receitas') return fixasReceitasACopiar(D, estado.ano, mes).length;
+  return fixasDespesasACopiar(D, estado.ano, mes).length;
 }
 
 function fichaDeCopiar() {
@@ -2119,7 +2116,10 @@ function gravarParcelas() {
   const desc = pegar('par-desc') || 'Parcela';
   const inicio = new Date(pegar('par-data') + 'T00:00:00');
   for (let i = 0; i < quantas; i++) {
-    const d = new Date(inicio.getFullYear(), inicio.getMonth() + i, inicio.getDate());
+    // `proximoMes` em vez de somar no mês na mão: somar deixa o dia
+    // transbordar. Uma parcela do dia 31 de janeiro virava 3 de
+    // março — fevereiro ficava sem parcela e março ficava com duas.
+    const d = proximoMes(inicio, i);
     const item = {
       id: novoId(paraReceitas ? 'r' : 'd', paraReceitas ? D.receitas : D.despesas),
       data: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
