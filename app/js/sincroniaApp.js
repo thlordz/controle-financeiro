@@ -18,8 +18,10 @@
 
 import { criarCliente } from './turso.js';
 import {
-  sincronizar, lerConfiguracao, gravarConfiguracao, estaLigada,
+  sincronizar, baixar, garantirTabela,
+  lerConfiguracao, gravarConfiguracao, estaLigada,
 } from './sincronia.js';
+import { agora, registrarRemocao } from './dominio.js';
 
 /** Preenchidos pelo app.js, que é quem tem os dados na mão. */
 let pegarDados = () => null;
@@ -185,6 +187,144 @@ function emPortugues(e) {
     return 'Esse endereço não existe mais. Confere no Turso.';
   }
   return `Não rolou: ${m.slice(0, 120)}`;
+}
+
+/* ---------------- espelhar o banco ---------------- */
+
+/**
+ * Jogar fora o que está aqui e ficar com o que o banco tem.
+ *
+ * A sincronia normal é uma UNIÃO: ela traz o que falta e nunca tira o
+ * que sobra. É o certo no dia a dia — some com um lançamento por
+ * engano e ele volta do outro aparelho. Mas quando um aparelho
+ * acumulou coisa que nunca esteve no banco, a união não conserta: os
+ * dois números nunca mais se encontram.
+ *
+ * Esta função é a saída para isso, e é destrutiva de propósito: o que
+ * está aqui e não está no banco **some**. Por isso quem chama tem de
+ * perguntar antes, e oferecer um backup.
+ */
+export async function trazerTudoDoBanco() {
+  const cliente = clienteDaSincronia();
+  if (!cliente) return { ok: false, recado: 'Falta o endereço do banco ou o token.' };
+  if (rodando) return { ok: false, recado: 'Espera a sincronia que está rodando terminar.' };
+
+  rodando = true;
+  dizer('Trazendo tudo do banco…');
+  try {
+    await garantirTabela(cliente);
+    const { remoto, maisNovo } = await baixar(cliente, '');
+
+    const quantos = ['receitas', 'despesas', 'devedores', 'investimento']
+      .reduce((t, k) => t + (remoto[k] || []).length, 0);
+    if (!quantos) {
+      dizer('O banco está vazio. Não troquei nada.', 'ruim');
+      return { ok: false, recado };
+    }
+
+    const daqui = pegarDados() || {};
+    const antes = ['receitas', 'despesas', 'devedores', 'investimento']
+      .reduce((t, k) => t + (daqui[k] || []).length, 0);
+
+    // Fica exatamente o que o banco tem. As marcas de exclusão
+    // antigas vão junto: elas falavam de ids deste aparelho, e este
+    // aparelho acabou de deixar de existir.
+    await aplicarDados({
+      versao: daqui.versao || 1,
+      config: Object.keys(remoto.config || {}).length ? remoto.config : (daqui.config || {}),
+      receitas: remoto.receitas,
+      despesas: remoto.despesas,
+      devedores: remoto.devedores,
+      investimento: remoto.investimento,
+      logAcesso: remoto.logAcesso || [],
+      recordes: remoto.recordes || {},
+      cicloInicio: remoto.cicloInicio || '',
+      diasProtegidos: remoto.diasProtegidos || [],
+      escudoBonus: remoto.escudoBonus || 0,
+      escudoBonusVersao: remoto.escudoBonusVersao || '',
+      removidos: [],
+      sincroniaIniciada: true,
+      salvoEm: '',
+    });
+
+    gravarConfiguracao({ marca: maisNovo, em: new Date().toISOString() });
+    const diferenca = quantos - antes;
+    dizer(`Pronto: este aparelho agora tem os ${quantos} lançamentos do banco`
+      + (diferenca ? ` (${diferenca > 0 ? '+' : ''}${diferenca}).` : '.'), 'bom');
+    return { ok: true, recado, quantos };
+  } catch (e) {
+    dizer(emPortugues(e), 'ruim');
+    return { ok: false, recado };
+  } finally {
+    rodando = false;
+    anunciar();
+  }
+}
+
+/**
+ * O caminho contrário: o banco passa a ser uma cópia DESTE aparelho.
+ *
+ * É o conserto para o caso que mais dói — um aparelho certo e os
+ * outros errados. Trazer tudo do banco não resolve ali, porque o
+ * aparelho errado sobe o que tem de errado assim que abre, e aí o
+ * banco também fica errado.
+ *
+ * Aqui quem manda é este aparelho: tudo que existe no banco e não
+ * existe aqui vira uma exclusão, com carimbo de agora. Os outros
+ * aparelhos recebem essas exclusões na sincronia seguinte e passam a
+ * mostrar o mesmo que este. Nenhum dado é apagado à força em ninguém:
+ * o que viaja é a marca, e ela segue a mesma regra de sempre.
+ */
+export async function mandarNoBanco() {
+  const cliente = clienteDaSincronia();
+  if (!cliente) return { ok: false, recado: 'Falta o endereço do banco ou o token.' };
+  if (rodando) return { ok: false, recado: 'Espera a sincronia que está rodando terminar.' };
+
+  const dados = pegarDados();
+  if (!dados) return { ok: false, recado: 'Ainda estou abrindo o app.' };
+
+  rodando = true;
+  dizer('Deixando o banco igual a este aparelho…');
+  try {
+    await garantirTabela(cliente);
+
+    const [r] = await cliente.executar(
+      `SELECT tipo, id FROM registros WHERE removido = 0 AND tipo != 'estado'`);
+
+    const LISTAS = ['receitas', 'despesas', 'devedores', 'investimento'];
+    const daqui = {};
+    for (const t of LISTAS) daqui[t] = new Set((dados[t] || []).map((x) => x?.id));
+
+    let marcados = 0;
+    for (const linha of r?.linhas || []) {
+      if (!LISTAS.includes(linha.tipo)) continue;
+      if (daqui[linha.tipo].has(linha.id)) continue;
+      registrarRemocao(dados, linha.tipo, linha.id);
+      marcados++;
+    }
+
+    // Tudo daqui sobe com carimbo de agora: assim nada deste aparelho
+    // perde para uma versão mais nova que esteja lá.
+    const momento = agora();
+    for (const t of LISTAS) {
+      for (const item of dados[t] || []) item.atualizadoEm = momento;
+    }
+
+    rodando = false;                 // a rodada abaixo precisa poder entrar
+    const r2 = await sincronizarAgora({ silenciosa: true });
+    if (!r2.ok) return r2;
+
+    dizer(marcados
+      ? `Pronto. Mandei apagar ${marcados} que não existem aqui; os outros aparelhos somem com eles na próxima sincronia.`
+      : 'Pronto. O banco já estava igual a este aparelho.', 'bom');
+    return { ok: true, recado, marcados };
+  } catch (e) {
+    dizer(emPortugues(e), 'ruim');
+    return { ok: false, recado };
+  } finally {
+    rodando = false;
+    anunciar();
+  }
 }
 
 /* ---------------- quando sincronizar sozinho ---------------- */

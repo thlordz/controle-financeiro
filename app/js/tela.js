@@ -30,7 +30,7 @@ import {
 } from './sincronia.js';
 import {
   sincronizarAgora, testarConexao, estadoDaSincronia, quandoSincroniaMudar,
-  contarTempo,
+  contarTempo, trazerTudoDoBanco, mandarNoBanco,
 } from './sincroniaApp.js';
 import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 import { temVersaoNova, versaoLaFora } from './atualizacao.js';
@@ -1584,6 +1584,21 @@ function secaoDeAjuste(chave) {
           <div class="chave__nome">Testar a conexão</div>
           <div class="chave__sub">Só confere se o endereço e o token funcionam</div>
         </span>
+      </button>
+      <div class="moldura" style="margin-top:18px">Quando um aparelho fica diferente dos outros</div>
+      <button class="cartao" style="margin-top:10px" onclick="abrirMandarNoBanco()">
+        <span class="pastilha pastilha--verde">${icone('sobe')}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">Este aqui é o certo</div>
+          <div class="chave__sub">Manda os outros ficarem iguais a este</div>
+        </span>
+      </button>
+      <button class="cartao" style="margin-top:10px" onclick="abrirEspelharBanco()">
+        <span class="pastilha pastilha--vermelha">${icone('desce')}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">Este aqui é o errado</div>
+          <div class="chave__sub">Joga fora o daqui e pega o do banco</div>
+        </span>
       </button>` : ''}
       <button class="cartao" style="margin-top:10px" onclick="trocarDeBanco()">
         <span class="pastilha pastilha--ouro">${icone('engrenagem')}</span>
@@ -2404,7 +2419,7 @@ async function testarBancoDosAjustes() {
  * O aviso de puxar-para-sincronizar. Quem mede o dedo é o
  * sincroniaApp; aqui só se desenha o que ele manda.
  */
-export function mostrarPuxao(distancia, pronto) {
+function pastilhaDoPuxao() {
   let el = $('puxao');
   if (!el) {
     el = document.createElement('div');
@@ -2412,10 +2427,148 @@ export function mostrarPuxao(distancia, pronto) {
     el.className = 'puxao';
     document.body.appendChild(el);
   }
-  if (!distancia) { el.classList.remove('puxao--visivel'); return; }
+  return el;
+}
+
+let sumirPuxao = null;
+
+/**
+ * O aviso que desce do alto enquanto o dedo puxa.
+ *
+ * Ele sumia no instante em que o dedo saía, e a sincronia seguia em
+ * silêncio: puxar a tela parecia não fazer nada. Agora a pastilha
+ * fica — ela passa a "Sincronizando…" quando a rodada começa e mostra
+ * o resultado antes de sumir. Quem puxou vê que puxou.
+ */
+export function mostrarPuxao(distancia, pronto) {
+  const el = pastilhaDoPuxao();
+  clearTimeout(sumirPuxao);
+  if (!distancia) {
+    // Soltar não apaga nada se a sincronia já assumiu a pastilha.
+    if (estadoDaSincronia().rodando) return;
+    el.classList.remove('puxao--visivel');
+    return;
+  }
   el.classList.add('puxao--visivel');
   el.style.setProperty('--puxada', `${distancia}px`);
   el.textContent = pronto ? 'Solta que eu sincronizo' : 'Puxa mais um pouco';
+}
+
+/** A mesma pastilha, agora contando como foi a sincronia. */
+function pintarPuxaoDaSincronia(e) {
+  const el = $('puxao');
+  // Sem pastilha na tela, a sincronia é de fundo: não vale aparecer
+  // do nada no meio do uso.
+  if (!el || (!el.classList.contains('puxao--visivel') && !e.rodando)) return;
+  clearTimeout(sumirPuxao);
+  el.classList.add('puxao--visivel');
+  el.style.setProperty('--puxada', '78px');
+  if (e.rodando) { el.textContent = 'Sincronizando…'; return; }
+  el.textContent = e.recado || 'Pronto';
+  sumirPuxao = setTimeout(() => el.classList.remove('puxao--visivel'), 2200);
+}
+quandoSincroniaMudar(pintarPuxaoDaSincronia);
+
+/**
+ * "Deixar igual ao banco": o conserto para quando um aparelho
+ * divergiu dos outros e não volta mais sozinho.
+ *
+ * A sincronia de todo dia é uma união — ela traz o que falta e nunca
+ * tira o que sobra, para um lançamento apagado por engano poder
+ * voltar do outro aparelho. O preço é que um aparelho com coisa que
+ * nunca esteve no banco fica diferente para sempre.
+ *
+ * Aqui o banco manda, e o que está só aqui some. Por isso tem tela de
+ * aviso, backup oferecido antes e o número na cara.
+ */
+/**
+ * "Este aqui é o certo": o aparelho que está com os números bons
+ * passa a mandar, e os outros se ajustam na sincronia seguinte.
+ *
+ * É o lado que resolve o caso difícil. O botão irmão — trazer tudo do
+ * banco — não serve quando é o BANCO que está errado, e o banco fica
+ * errado rapidinho: o aparelho divergente sobe o que tem assim que
+ * abre.
+ */
+function abrirMandarNoBanco() {
+  const q = quantoTemGuardado();
+  mostrarFolha(`
+    <div class="folha__titulo">Este aparelho é o certo</div>
+    <p class="explica">
+      Eu mando o banco ficar igual a este aparelho. O que existir no banco e
+      não existir aqui vai ser apagado — nos outros aparelhos também, na
+      próxima vez que eles sincronizarem.
+    </p>
+    <div class="contagem">
+      <span><b>${q.receitas}</b> receitas</span>
+      <span><b>${q.despesas}</b> despesas</span>
+      <span><b>${q.devedores}</b> devedores</span>
+      <span><b>${q.investimento}</b> no investimento</span>
+    </div>
+    <div class="perigo">
+      <p>
+        Confere se os números acima são mesmo os certos. Se tiver lançamento que
+        só existe no outro aparelho e você quer manter, ele some.
+      </p>
+    </div>
+    <button class="secundario" style="width:100%" onclick="baixarBackup()">
+      Guardar um backup antes
+    </button>
+    <button class="principal" style="margin-top:10px" onclick="mandarNoBancoAgora()">
+      Sim, este é o certo
+    </button>
+    <div class="rodape-form">
+      <button class="secundario" onclick="fecharFolha()">Deixa pra lá</button>
+    </div>`);
+}
+
+async function mandarNoBancoAgora() {
+  fecharFolha();
+  avisar('Mandando…');
+  const r = await mandarNoBanco();
+  desenhar();
+  avisar(r.recado);
+}
+
+function abrirEspelharBanco() {
+  const q = quantoTemGuardado();
+  mostrarFolha(`
+    <div class="folha__titulo">Deixar igual ao banco</div>
+    <p class="explica">
+      Serve quando este aparelho está mostrando números diferentes dos outros e
+      não acerta sozinho. Eu apago tudo que está aqui e ponho no lugar
+      exatamente o que o banco tem.
+    </p>
+    <div class="contagem">
+      <span><b>${q.receitas}</b> receitas</span>
+      <span><b>${q.despesas}</b> despesas</span>
+      <span><b>${q.devedores}</b> devedores</span>
+      <span><b>${q.investimento}</b> no investimento</span>
+    </div>
+    <div class="perigo">
+      <p>
+        O que existir <b>só neste aparelho</b> vai embora e não volta. Se o que
+        está certo é o daqui, não use isto: sincronize normal e faça isto no
+        OUTRO aparelho.
+      </p>
+    </div>
+    <button class="secundario" style="width:100%" onclick="baixarBackup()">
+      Guardar um backup antes
+    </button>
+    <button class="principal" style="margin-top:10px" onclick="espelharBancoAgora()">
+      Pode trocar pelo que está no banco
+    </button>
+    <div class="rodape-form">
+      <button class="secundario" onclick="fecharFolha()">Deixa pra lá</button>
+    </div>`);
+}
+
+async function espelharBancoAgora() {
+  fecharFolha();
+  avisar('Trazendo tudo do banco…');
+  const r = await trazerTudoDoBanco();
+  desenhar();
+  avisar(r.recado);
 }
 
 function conexaoGuardada() {
@@ -3490,6 +3643,7 @@ Object.assign(window, {
   explicarEscudos, blocoDeEscudos, explicarAjuste, listaDaAparencia,
   procurarAtualizacaoAgora, baixarVersaoNova,
   abrirCopiarFixos, copiarFixosAgora, sincronizarPeloBotao, testarBancoDosAjustes,
+  abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
