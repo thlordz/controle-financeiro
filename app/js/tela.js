@@ -42,7 +42,25 @@ const noCelular = () => Boolean(window.Capacitor?.isNativePlatform?.());
 /** Chamado toda vez que a tela mexe nos dados. Ligado em app.js. */
 let aoMexer = () => {};
 export function quandoMexer(fn) { aoMexer = fn; }
-function mexeuNosDados() { aoMexer(D); }
+/**
+ * Avisa que os dados mudaram — e carimba o que mudou.
+ *
+ * O carimbo é a hora da última alteração do lançamento, e é com ele
+ * que a sincronia decide o que subir: ela manda o que for mais novo
+ * que a última visita. Um lançamento editado sem carimbo novo carrega
+ * a data antiga, fica atrás daquele corte e **nunca sobe** — a
+ * alteração existe aqui e em lugar nenhum mais.
+ *
+ * Era o que acontecia com toda edição desde o redesenho da 4.0:
+ * trocar um status no celular não mudava nada no computador, porque
+ * a troca não viajava. Quem chama esta função passa o que tocou.
+ */
+function mexeuNosDados(...tocados) {
+  for (const item of tocados) {
+    if (item && typeof item === 'object') carimbar(item);
+  }
+  aoMexer(D);
+}
 
 /* ===================================================================
    Protótipo navegável do Controle Financeiro.
@@ -62,6 +80,7 @@ const estado = {
   planta: true,   // reposto do que ficou guardado, logo abaixo
   detalheInicio: false,  // os números de "já entrou / ainda falta" na tela inicial
   faturaInicio: false,   // o cartão da fatura na tela inicial
+  mostrarObs: false,     // a observação embaixo de cada lançamento
   filtro: 'todos',
   selecao: new Set(),
   ajuste: null,    // seção aberta dentro dos Ajustes
@@ -784,6 +803,13 @@ function mudarFaturaInicio(ligado) {
   avisar(ligado ? 'A fatura tá na tela inicial' : 'Tirei a fatura de lá');
 }
 
+function mudarMostrarObs(ligado) {
+  estado.mostrarObs = ligado;
+  guardar('cf:mostrarObs', ligado);
+  desenhar();
+  avisar(ligado ? 'Agora dá pra ver as observações' : 'Escondi as observações');
+}
+
 function mudarPlanta(ligada) {
   estado.planta = ligada;
   guardar('cf:planta', ligada);
@@ -893,11 +919,17 @@ function telaLancamentos(qual, p) {
         <div class="resumo__valor resumo__valor--ouro dinheiro">${real(recebe?p.faltaReceber:p.faltaPagar)}</div>
       </div>
     </div>
-    ${!recebe && p.fatura ? `<div class="cartao" style="cursor:default;margin-bottom:10px">
+    ${!recebe && (p.fatura || p.faturaPaga) ? `<div class="cartao" style="cursor:default;margin-bottom:10px">
         <span class="pastilha pastilha--ouro">${icone('cartao')}</span>
         <span class="cartao__meio">
-          <span class="rotulo">A fatura do cartão</span>
-          <span class="cartao__valor dinheiro">${real(p.fatura)}</span>
+          <span class="rotulo">Fatura atual</span>
+          <span class="cartao__valor dinheiro">${real(p.faturaAtual)}</span>
+          <span class="quebra">
+            <span class="quebra__parte"><span class="quebra__nome">Total prevista</span>
+              <span class="quebra__valor quebra__valor--ouro dinheiro">${real(p.faturaTotalPrevista)}</span></span>
+            <span class="quebra__parte"><span class="quebra__nome">Já paguei</span>
+              <span class="quebra__valor quebra__valor--menta dinheiro">${real(p.faturaPaga)}</span></span>
+          </span>
         </span>
       </div>` : ''}
     <div class="busca celular-so" style="margin-bottom:12px">${icone('lupa',17)}
@@ -970,6 +1002,8 @@ function linhaLancamento(x, recebe) {
     </span>
     <span class="item__nome">${escapar(x.descricao)||'(sem descrição)'}</span>
     <span class="item__cat">${escapar(x.categoria)||''}${x.formaPgto?' · '+escapar(x.formaPgto):''}</span>
+    ${estado.mostrarObs && x.observacao
+      ? `<span class="item__obs">${escapar(x.observacao)}</span>` : ''}
   </div>`;
 }
 
@@ -994,7 +1028,7 @@ function marcarTodosComo(status) {
   for (const x of marcados) x.status = status;
   const quantos = marcados.length;
   estado.selecao.clear();
-  mexeuNosDados();
+  mexeuNosDados(...marcados);
   desenhar();
   avisar(`Marquei ${quantos === 1 ? 'um' : quantos} como ${status.toLowerCase()}`);
 }
@@ -1047,7 +1081,7 @@ function virarStatus(id) {
     const quitado = D.receitas.includes(x) ? 'Recebido' : 'Pago';
     x.status = texto(x.status) === texto(quitado) ? 'Pendente' : quitado;
   }
-  mexeuNosDados();
+  mexeuNosDados(x);
   desenhar();
   avisar(x.descricao ? `${x.descricao}: ${x.status.toLowerCase()}!` : x.status);
 }
@@ -1061,7 +1095,7 @@ function virarDevedor(id) {
   if (!v) return;
   if (texto(statusDevedor(v)) === 'pago') v.pagouEm = '';
   else v.pagouEm = paraISO(hoje());
-  mexeuNosDados();
+  mexeuNosDados(v);
   desenhar();
   avisar(`${v.nome}: ${statusDevedor(v).toLowerCase()}!`);
 }
@@ -1181,6 +1215,8 @@ function linhasDeDevedores() {
       </span>
       <span class="item__nome">${escapar(v.nome)||''}</span>
       <span class="item__cat">${escapar(v.tipo)||''}</span>
+      ${estado.mostrarObs && v.observacao
+        ? `<span class="item__obs">${escapar(v.observacao)}</span>` : ''}
     </div>`;
   }).join('');
 }
@@ -1251,7 +1287,7 @@ function telaPlanta() {
    =================================================================== */
 const SECOES_AJUSTES = {
   voce:      { nome: 'Você',            icone: 'gente',      cor: 'menta' },
-  inicio:    { nome: 'Tela inicial',    icone: 'casa',       cor: 'verde' },
+  inicio:    { nome: 'O que aparece',   icone: 'casa',       cor: 'verde' },
   aparencia: { nome: 'Aparência',       icone: 'sol',        cor: 'ouro' },
   lembrete:  { nome: 'Lembrete',        icone: 'sino',       cor: 'verde' },
   planta:    { nome: 'A plantinha',     icone: 'planta',     cor: 'verde' },
@@ -1282,7 +1318,8 @@ function resumoDaTelaInicial() {
   const liga = [];
   if (estado.detalheInicio) liga.push('o que falta entrar e pagar');
   if (estado.faturaInicio) liga.push('a fatura');
-  return liga.length ? `Mostrando ${liga.join(' e ')}` : 'Só os totais do mês';
+  if (estado.mostrarObs) liga.push('as observações');
+  return liga.length ? `Mostrando ${liga.join(', ')}` : 'O básico';
 }
 
 function irNoAjuste(secao) {
@@ -1466,8 +1503,22 @@ function secaoDeAjuste(chave) {
         </span>
       </label>
       <p class="explica explica--fraco">
-        São os mesmos números que já existem dentro de Receitas e de Despesas.
-        Aqui eles ficam na tela inicial, pra você não precisar entrar.
+        Os dois de cima são os mesmos números que já existem dentro de Receitas
+        e de Despesas. Aqui eles ficam na tela inicial, pra você não precisar
+        entrar.
+      </p>
+      <label class="chave" style="margin-top:4px">
+        <input type="checkbox" ${estado.mostrarObs?'checked':''}
+               onchange="mudarMostrarObs(this.checked)">
+        <span class="chave__trilho"><span class="chave__bola"></span></span>
+        <span class="chave__texto">
+          <div class="chave__nome">A observação de cada lançamento</div>
+          <div class="chave__sub">Aparece embaixo, na lista, em quem tiver uma</div>
+        </span>
+      </label>
+      <p class="explica explica--fraco">
+        Útil pra ver o número da parcela sem abrir o lançamento. Deixa a lista
+        um pouco mais alta.
       </p>`,
 
     aparencia: () => listaDaAparencia(),
@@ -1830,7 +1881,7 @@ function salvar(pre) {
   x.observacao = pegar(pre+'-obs');
   fecharFolha();
   estado.escolhido = null;
-  mexeuNosDados();
+  mexeuNosDados(x);
   desenhar();
   avisar('Pronto, salvei');
 }
@@ -1850,7 +1901,7 @@ function salvarDevedor(pre) {
   v.pagouEm = pegarEscolha(pre+'-perdoado') === 'Sim' ? '-' : pegar(pre+'-pagou');
   fecharFolha();
   estado.escolhido = null;
-  mexeuNosDados();
+  mexeuNosDados(v);
   desenhar();
   avisar('Pronto, salvei');
 }
@@ -1974,7 +2025,7 @@ function gravarNovo() {
   const [a, m] = item.data.split('-').map(Number);
   estado.ano = a; estado.mes = m - 1;
   fecharFolha();
-  mexeuNosDados();
+  mexeuNosDados(item);
   desenhar();
   avisar(recebe ? 'Anotei essa entrada' : 'Anotei esse gasto');
 }
@@ -2087,21 +2138,25 @@ function gravarInvestir(qual) {
     return;
   }
 
+  let criado;
   if (qual === 'aporte') {
-    D.despesas.push({ id: 'd-'+Math.random().toString(36).slice(2,10), data, valor, descricao,
-      status: 'Pago', categoria: 'Investimentos', formaPgto: pegar('inv-forma'), fixa: 'Não' });
+    criado = { id: 'd-'+Math.random().toString(36).slice(2,10), data, valor, descricao,
+      status: 'Pago', categoria: 'Investimentos', formaPgto: pegar('inv-forma'), fixa: 'Não' };
+    D.despesas.push(criado);
     // Nada é gravado na aba de investimento: ela lê a despesa acima.
     avisar('Guardei! Saiu da conta como despesa');
   } else if (qual === 'retirada') {
-    D.receitas.push({ id: 'r-'+Math.random().toString(36).slice(2,10), data, valor, descricao,
-      status: 'Recebido', categoria: 'Investimento', origem: 'Retirada', fixa: 'Não' });
+    criado = { id: 'r-'+Math.random().toString(36).slice(2,10), data, valor, descricao,
+      status: 'Recebido', categoria: 'Investimento', origem: 'Retirada', fixa: 'Não' };
+    D.receitas.push(criado);
     avisar('Tirei do investimento e caiu na conta');
   } else {
-    D.investimento.push({ id: 'i-'+Math.random().toString(36).slice(2,10), data, valor, descricao, categoria: 'Rendimento' });
+    criado = { id: 'i-'+Math.random().toString(36).slice(2,10), data, valor, descricao, categoria: 'Rendimento' };
+    D.investimento.push(criado);
     avisar('Anotei o que rendeu');
   }
   fecharFolha();
-  mexeuNosDados();
+  mexeuNosDados(criado);
   desenhar();
 }
 
@@ -2236,6 +2291,7 @@ function gravarParcelas() {
   const valor = pegarValor('par-valor');
   const desc = pegar('par-desc') || 'Parcela';
   const inicio = new Date(pegar('par-data') + 'T00:00:00');
+  const criadas = [];
   for (let i = 0; i < quantas; i++) {
     // `proximoMes` em vez de somar no mês na mão: somar deixa o dia
     // transbordar. Uma parcela do dia 31 de janeiro virava 3 de
@@ -2249,8 +2305,9 @@ function gravarParcelas() {
     };
     if (paraReceitas) D.receitas.push(item);
     else { item.formaPgto = pegar('par-forma'); D.despesas.push(item); }
+    criadas.push(item);
   }
-  fecharFolha(); mexeuNosDados(); desenhar();
+  fecharFolha(); mexeuNosDados(...criadas); desenhar();
   avisar(`Pronto, lancei as ${quantas} parcelas`);
 }
 
@@ -3440,7 +3497,7 @@ Object.assign(window, {
   fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
   mudarCor, mudarDesfoque, mudarFundo, mudarHoraDoLembrete, mudarLembrete, mudarMes,
-  mudarNome, mudarOpacidade, mudarPlanta, mudarDetalheInicio, mudarFaturaInicio, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
+  mudarNome, mudarOpacidade, mudarPlanta, mudarDetalheInicio, mudarFaturaInicio, mudarMostrarObs, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
   salvar, salvarDevedor, salvarRendimento, tirarFoto, trocarFonte, trocarTema,
   trocarTipoNovo, usarSoNesteAparelho, virarDevedor, virarStatus, voltarDosAjustes, voltarParaHoje,
 });
@@ -3459,6 +3516,7 @@ export function iniciarTela(dados) {
   estado.planta = lerGuardado('cf:planta', true);
   estado.detalheInicio = lerGuardado('cf:detalheInicio', false);
   estado.faturaInicio = lerGuardado('cf:faturaInicio', false);
+  estado.mostrarObs = lerGuardado('cf:mostrarObs', false);
   lembrete.ligado = lerGuardado('cf:lembrete', false);
   lembrete.hora = lerGuardado('cf:lembreteHora', '20:00');
   estado.ano = hoje().getFullYear();

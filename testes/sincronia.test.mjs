@@ -548,5 +548,51 @@ await teste('a exclusão chega no outro aparelho', async () => {
   igual(depois.dados.despesas.length, 0, 'e o celular perde também');
 });
 
+await teste('editar sem renovar o carimbo não sobe', async () => {
+  // A terceira armadilha da mesma família, e a que mais incomodou:
+  // trocar o status de uma despesa no celular e não ver nada mudar no
+  // computador. A subida leva o que for MAIS NOVO que a última visita,
+  // e um lançamento editado que continua com o carimbo antigo fica
+  // atrás desse corte para sempre.
+  const banco = bancoFalso();
+  const pc = aparelho({ despesas: [
+    { id: 'e1', valor: 10, descricao: 'Conta', status: 'Pendente', atualizadoEm: T(2) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+
+  // Editado na marra, sem carimbo novo.
+  const semCarimbo = aparelho({ despesas: [
+    { id: 'e1', valor: 10, descricao: 'Conta', status: 'Pago', atualizadoEm: T(2) } ] });
+  semCarimbo.sincroniaIniciada = true;
+  await sincronizar({ cliente: banco, dados: semCarimbo, desde: s1.marca });
+  const guardado = JSON.parse(banco.linhas.get('despesas:e1').conteudo);
+  igual(guardado.status, 'Pendente', 'não subiu — é esta a armadilha');
+
+  // Com carimbo novo, que é o que o `mexeuNosDados` faz agora.
+  const comCarimbo = aparelho({ despesas: [
+    { id: 'e1', valor: 10, descricao: 'Conta', status: 'Pago', atualizadoEm: T(9) } ] });
+  comCarimbo.sincroniaIniciada = true;
+  await sincronizar({ cliente: banco, dados: comCarimbo, desde: s1.marca });
+  const agora = JSON.parse(banco.linhas.get('despesas:e1').conteudo);
+  igual(agora.status, 'Pago', 'com carimbo novo, sobe');
+});
+
+await teste('a troca de status chega no outro aparelho', async () => {
+  const banco = bancoFalso();
+  const pc = aparelho({ despesas: [
+    { id: 'e2', valor: 10, descricao: 'Conta', status: 'Pendente', atualizadoEm: T(2) } ] });
+  const s1 = await sincronizar({ cliente: banco, dados: pc, desde: '' });
+  const celular = await sincronizar({ cliente: banco, dados: aparelho(), desde: '' });
+  igual(celular.dados.despesas[0].status, 'Pendente', 'o celular recebeu pendente');
+
+  const pago = aparelho({ despesas: [
+    { id: 'e2', valor: 10, descricao: 'Conta', status: 'Pago', atualizadoEm: T(9) } ] });
+  pago.sincroniaIniciada = true;
+  await sincronizar({ cliente: banco, dados: pago, desde: s1.marca });
+
+  const depois = await sincronizar({
+    cliente: banco, dados: celular.dados, desde: celular.marca });
+  igual(depois.dados.despesas[0].status, 'Pago', 'e o celular vê pago');
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);

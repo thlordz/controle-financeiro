@@ -34,6 +34,7 @@ export function configurarSincronia(ganchos) {
 
 const ouvintes = new Set();
 let rodando = false;
+let repetirDepois = false;
 let recado = '';
 let tomDoRecado = '';   // '', 'bom' ou 'ruim'
 
@@ -106,7 +107,14 @@ export async function testarConexao(url, token) {
  * Devolve `{ ok, recado }` para quem quiser reagir.
  */
 export async function sincronizarAgora({ silenciosa = false } = {}) {
-  if (rodando) return { ok: false, recado: 'Já estou sincronizando, calma aí.' };
+  // Um pedido que chega no meio de uma rodada não pode ser descartado:
+  // ele quase sempre é uma alteração que acabou de ser feita, e
+  // descartá-lo significava a alteração ficar aqui até a próxima.
+  // Agora ele fica anotado e a rodada se repete ao terminar.
+  if (rodando) {
+    repetirDepois = true;
+    return { ok: false, recado: 'Já estou sincronizando; repito em seguida.' };
+  }
 
   const cliente = clienteDaSincronia();
   if (!cliente) {
@@ -153,6 +161,10 @@ export async function sincronizarAgora({ silenciosa = false } = {}) {
   } finally {
     rodando = false;
     anunciar();
+    if (repetirDepois) {
+      repetirDepois = false;
+      sincronizarAgora({ silenciosa: true });
+    }
   }
 }
 
@@ -177,9 +189,20 @@ function emPortugues(e) {
 
 /* ---------------- quando sincronizar sozinho ---------------- */
 
-// Curta de propósito: junta uma rajada de mudanças (marcar dez contas
-// como pagas) numa subida só, sem deixar o dado parado muito tempo.
-const ESPERA = 1500;
+/**
+ * Terminou de salvar, apagar ou trocar um status? Sobe agora.
+ *
+ * A espera era de um segundo e meio, para juntar uma rajada numa
+ * subida só. Na prática ela só atrasava: quem salva um lançamento e
+ * fecha o app em seguida via a alteração ficar para trás, e quem
+ * trocava um status no celular não via mudar no computador. Quem
+ * chama isto é sempre uma ação ACABADA, não uma tecla — então quase
+ * não há rajada para juntar.
+ *
+ * Os 300 ms que sobraram existem só para o toque duplo: dois selos
+ * trocados em sequência viram uma subida, não duas.
+ */
+const ESPERA = 300;
 let agendada = null;
 
 export function agendarSincronia() {
@@ -189,6 +212,27 @@ export function agendarSincronia() {
     agendada = null;
     sincronizarAgora({ silenciosa: true });
   }, ESPERA);
+}
+
+/**
+ * De olho no que os outros aparelhos fazem.
+ *
+ * Subir na hora resolve metade do problema: a alteração sai daqui
+ * depressa. A outra metade é chegar — e para chegar, este aparelho
+ * precisa perguntar. Com o app aberto na tela, ele pergunta de minuto
+ * em minuto; escondido, não pergunta nada, para não gastar bateria
+ * com uma tela que ninguém está vendo.
+ */
+const ESPERA_ENTRE_OLHADAS = 60 * 1000;
+let relogio = null;
+
+function olharDeVezEmQuando() {
+  clearInterval(relogio);
+  relogio = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (!estaLigada() || rodando) return;
+    sincronizarAgora({ silenciosa: true });
+  }, ESPERA_ENTRE_OLHADAS);
 }
 
 /**
@@ -210,9 +254,14 @@ function despacharPendente() {
  */
 export function ligarGestosDeSincronia({ aoPuxar = () => {}, aoSoltar = () => {} } = {}) {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') despacharPendente();
+    if (document.visibilityState === 'hidden') { despacharPendente(); return; }
+    // Voltar ao app é o momento em que ele mais provavelmente está
+    // desatualizado: alguma coisa aconteceu no outro aparelho
+    // enquanto este estava guardado no bolso.
+    if (estaLigada()) sincronizarAgora({ silenciosa: true });
   });
   window.addEventListener('pagehide', despacharPendente);
+  olharDeVezEmQuando();
 
   const LIMITE = 70;
   const RESISTENCIA = 0.45;

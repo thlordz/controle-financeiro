@@ -202,6 +202,10 @@ button,input,select { font-family:inherit; }
 .item__valor{margin-left:auto;font-size:15px;font-weight:700}
 .item__nome{display:block;font-size:15.5px;font-weight:600;margin-top:6px}
 .item__cat{display:block;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--apagado);margin-top:1px}
+/* A observação, quando ligada nos ajustes. Em caixa normal e um tom
+   mais claro: ela é um bilhete, não um rótulo. */
+.item__obs{display:block;font-size:12.5px;line-height:1.35;color:var(--apagado);margin-top:4px;
+  overflow-wrap:anywhere}
 .selo{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px}
 .selo--pendente{background:var(--ouro-fundo);color:var(--ouro-frente)}
 .selo--ok{background:var(--verde-fundo);color:var(--verde-frente)}
