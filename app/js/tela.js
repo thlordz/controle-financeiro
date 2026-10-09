@@ -710,6 +710,36 @@ function confirmarReajuste() {
   avisar(Math.abs(diferenca) < 0.005 ? 'Já estava certinho' : 'Pronto, acertei o saldo');
 }
 
+/**
+ * A meta de investimento. Na troca de visual o botão que mudava a meta
+ * ficou pra trás: a tela mostrava a meta e não deixava mexer nela.
+ */
+function abrirMeta() {
+  const meta = Number(D.config.metaInvestimento) || 0;
+  mostrarFolha(`
+    <div class="folha__titulo">Sua meta de investimento</div>
+    <p class="explica">Quanto você quer juntar? Deixa em zero se não quiser meta nenhuma.</p>
+    <div class="valorao">
+      <span class="valorao__moeda">R$</span>
+      <input class="valorao__numero dinheiro" id="meta-nova" inputmode="numeric"
+             placeholder="0,00" autocomplete="off"
+             value="${meta ? meta.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}">
+      <div class="valorao__dica">vai digitando, eu começo pelos centavos</div>
+    </div>
+    <button class="principal" onclick="gravarMeta()">Pode salvar</button>
+    <div class="rodape-form"><button class="secundario" onclick="fecharFolha()">Deixa pra lá</button></div>`);
+  setTimeout(() => $('meta-nova')?.focus(), 480);
+}
+
+function gravarMeta() {
+  D.config.metaInvestimento = Math.max(0, pegarValor('meta-nova'));
+  D.config.atualizadoEm = agora();
+  fecharFolha();
+  mexeuNosDados();
+  desenhar();
+  avisar(D.config.metaInvestimento ? 'Pronto, meta guardada' : 'Pronto, tirei a meta');
+}
+
 /* ===================================================================
    Tema: claro, escuro ou o que o sistema estiver usando.
    "Sistema" é o padrão, e muda junto se a pessoa trocar o tema do
@@ -1233,7 +1263,8 @@ function telaInvestir() {
         <span style="color:var(--apagado);font-size:13.5px">você já guardou · a meta é ${real(meta)}</span>
       </div>
       <div class="progresso"><div class="progresso__cheio" style="--ate:${fatia}%"></div></div>
-      <span style="font-size:12.5px;color:var(--apagado)">${fatia >= 100 ? 'Meta batida!' : `Faltam ${real(Math.max(0, meta-total))}`} · ${fatia.toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span>
+      <span style="font-size:12.5px;color:var(--apagado)">${!meta ? 'Você ainda não definiu uma meta.' : fatia >= 100 ? 'Meta batida!' : `Faltam ${real(Math.max(0, meta-total))}`}${meta ? ' · '+fatia.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%' : ''}</span>
+      <button class="secundario" style="flex:none;padding:10px 18px" onclick="abrirMeta()">${meta ? 'Mudar a meta' : 'Definir a meta'}</button>
     </div>
     <div class="titulo-secao">O que foi e o que veio</div>
     ${(() => {
@@ -3644,11 +3675,11 @@ Object.assign(window, {
   procurarAtualizacaoAgora, baixarVersaoNova,
   abrirCopiarFixos, copiarFixosAgora, sincronizarPeloBotao, testarBancoDosAjustes,
   abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
-  abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
+  abrir, abrirDevedor, abrirInvestimento, abrirMeta, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
   escolherArquivoDeBackup, escolherArquivoDeFundo, trocarDeBanco, excluir, excluirDevedor, explicarSaldo, explicarSobra,
-  fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
+  fecharFolha, gravarInvestir, gravarMeta, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
   mudarCor, mudarDesfoque, mudarFundo, mudarHoraDoLembrete, mudarLembrete, mudarMes,
   mudarNome, mudarOpacidade, mudarPlanta, mudarDetalheInicio, mudarFaturaInicio, mudarMostrarObs, operacaoInvestir, pedirBackupParaRestaurar, previverReajuste,
