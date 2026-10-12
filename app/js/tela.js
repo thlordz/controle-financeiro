@@ -23,7 +23,7 @@ import {
   fixasReceitasACopiar, fixasDespesasACopiar, recorrentesACopiar,
   mesAnterior, proximoMes,
 } from './dominio.js';
-import { hoje, paraISO, formatarData } from './util.js';
+import { hoje, paraISO, paraData, formatarData } from './util.js';
 import { VERSAO } from './versao.js';
 import {
   lerConfiguracao, gravarConfiguracao, limparConfiguracao, estaLigada,
@@ -70,6 +70,7 @@ function mexeuNosDados(...tocados) {
 let D = null;   // preenchido por iniciarTela()
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_DA_SEMANA = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
 
 const estado = {
   tela: 'inicio',
@@ -986,8 +987,45 @@ function linhasDaTela() {
       <button class="ficha ${estado.filtro==='fixos'?'ativa':''}" onclick="estado.filtro='fixos'; redesenharLista()">Fixos</button>
     </div>
     ${barraDeSelecao(recebe)}
-    ${itens.length ? itens.map((x) => linhaLancamento(x, recebe)).join('')
+    ${itens.length ? agruparPorDia(itens, (x) => linhaLancamento(x, recebe))
       : vazioOuNadaAchado()}`;
+}
+
+/**
+ * O nome do dia como a gente fala: "Hoje", "Ontem", ou a semana mais
+ * a data. O ano fica de fora porque a lista é sempre de um mês só.
+ */
+function nomeDoDia(iso) {
+  if (!iso) return 'Sem data';
+  const hojeIso = paraISO(hoje());
+  if (iso === hojeIso) return 'Hoje';
+  const h = hoje();
+  if (iso === paraISO(new Date(h.getFullYear(), h.getMonth(), h.getDate() - 1))) return 'Ontem';
+  const d = paraData(iso);
+  if (!d) return bonito(iso);
+  const semana = DIAS_DA_SEMANA[d.getDay()].replace(/^./, (c) => c.toUpperCase());
+  return `${semana}, ${bonito(iso).slice(0, 5)}`;
+}
+
+/**
+ * Quebra a lista em blocos por dia, com um título em cada.
+ *
+ * A lista já vem ordenada por data, então basta notar quando ela
+ * muda. O título carrega a data, e por isso ela saiu de dentro de
+ * cada linha: repetir "12/10/2026" em cinco linhas seguidas embaixo
+ * de um título que diz "Hoje" é ruído.
+ */
+function agruparPorDia(itens, desenharLinha) {
+  let saida = '';
+  let diaAtual = null;
+  for (const x of itens) {
+    if (x.data !== diaAtual) {
+      diaAtual = x.data;
+      saida += `<div class="dia-titulo">${nomeDoDia(diaAtual)}</div>`;
+    }
+    saida += desenharLinha(x);
+  }
+  return saida;
 }
 
 /**
@@ -1018,7 +1056,6 @@ function linhaLancamento(x, recebe) {
       <input type="checkbox" ${marcado?'checked':''} onchange="marcar('${x.id}', this.checked)">
     </label>
     <span class="item__linha1">
-      <span class="item__data">${bonito(x.data)}</span>
       <button class="selo selo--clicavel ${classeDoSelo(x, bom)}"
         onclick="event.stopPropagation(); virarStatus('${x.id}')"
         title="${noCredito(x) && !recebe
@@ -1228,12 +1265,15 @@ function linhasDeDevedores() {
     if (busca) return `<div class="vazio">Nada com "${escapar(estado.busca)}" aqui.</div>`;
     return barra + `<div class="vazio">Ninguém te devendo em ${MESES[estado.mes].toLowerCase()}.<br>Melhor assim!</div>`;
   }
-  return barra + itens.map((v) => {
+  // Aqui o dia é a previsão de pagamento, não a data do lançamento —
+  // mas separar por dia ajuda igual, e deixa as duas telas com a
+  // mesma cara.
+  return barra + agruparPorDia(
+    itens.map((v) => ({ ...v, data: v.pgtoPrevisto })), (v) => {
     const st = statusDevedor(v);
     const cls = st === 'Pago' ? 'selo--ok' : (st === 'Atrasado' ? 'selo--atrasado' : 'selo--pendente');
     return `<div class="item" onclick="abrirDevedor('${v.id}')" role="button" tabindex="0">
       <span class="item__linha1">
-        <span class="item__data">${bonito(v.pgtoPrevisto)}</span>
         <button class="selo selo--clicavel ${cls}"
           onclick="event.stopPropagation(); virarDevedor('${v.id}')"
           title="Toca aqui pra marcar como pago">${st}</button>
@@ -1244,7 +1284,7 @@ function linhasDeDevedores() {
       ${estado.mostrarObs && v.observacao
         ? `<span class="item__obs">${escapar(v.observacao)}</span>` : ''}
     </div>`;
-  }).join('');
+  });
 }
 
 /**
@@ -1840,8 +1880,6 @@ function anexo(id, valor) {
  * coisa tão comum. Os dias mais atrás aparecem pelo nome da semana,
  * que é como a gente lembra: "isso eu paguei na quarta".
  */
-const DIAS_DA_SEMANA = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
-
 function fichasDeData(campo, atual) {
   const h = hoje();
   const atalhos = [];
