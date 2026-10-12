@@ -1468,11 +1468,11 @@ function blocoDeEscudos() {
   return `<button class="cartao" onclick="explicarEscudos()" style="margin-bottom:12px">
     <span class="escudos">${pinos}</span>
     <span class="cartao__meio">
-      <div class="chave__nome">${tem === 0 ? 'Nenhum escudo ainda'
+      <div class="chave__nome">${tem === 0 ? 'Nenhum escudo agora'
         : tem === 1 ? 'Um escudo guardado' : `${tem} escudos guardados`}</div>
       <div class="chave__sub">${cheio
         ? 'Cheio! Mais que três eu não guardo.'
-        : `Faltam ${faltam} ${faltam === 1 ? 'dia' : 'dias'} para o próximo`}</div>
+        : `${faltam === 1 ? 'Falta 1 dia' : `Faltam ${faltam} dias`} para o próximo`}</div>
     </span>
     <span class="cartao__acao">${icone('ajuda',16)}</span>
   </button>`;

@@ -120,7 +120,22 @@ export function escudosDisponiveis(dados) {
   const inicio = inicioDoCiclo(dias);
   const sequencia = calcularSequencia(dias, inicio);
 
-  const gastos = (dados?.diasProtegidos || []).filter((d) => !inicio || d >= inicio).length;
+  // Um dia coberto por escudo que depois se revela visita de verdade
+  // não é escudo gasto — é escudo devolvido.
+  //
+  // Acontece com dois aparelhos: o celular abre de manhã, não sabe que
+  // ontem você entrou pelo PC (a sincronia ainda não trouxe), acha que
+  // você faltou e quebra um escudo. Minutos depois a visita chega e o
+  // dia passa a constar nas duas listas. Contar esse dia como gasto
+  // foi o que zerou o estoque do Thiago: com a sincronia morta da 4.0
+  // à 4.7, três escudos foram queimados em dias em que ele entrou.
+  //
+  // A data continua em `diasProtegidos` de propósito: apagar dali
+  // mexeria em dado que sincroniza, e para a sequência tanto faz —
+  // o dia conta como presença dos dois jeitos.
+  const visitas = new Set(dados?.logAcesso || []);
+  const gastos = (dados?.diasProtegidos || [])
+    .filter((d) => (!inicio || d >= inicio) && !visitas.has(d)).length;
   const total = escudosGanhos(sequencia) + (Number(dados?.escudoBonus) || 0) - gastos;
   return Math.max(0, Math.min(MAX_ESCUDOS, total));
 }

@@ -145,5 +145,40 @@ teste('cartão e calendário batem em todo dia', () => {
   }
 });
 
+console.log('\nescudo gasto em dia que, no fim, teve visita');
+
+teste('dia protegido que vira visita devolve o escudo', () => {
+  // O caso do Thiago: o celular abre, não sabe que ontem você entrou
+  // pelo PC, e quebra um escudo para cobrir. A sincronia traz a visita
+  // depois. O dia agora está nas duas listas — e o escudo não pode
+  // continuar contando como gasto.
+  const d = base({
+    logAcesso: corrida(25, 0),            // 26 dias seguidos, ontem incluso
+    diasProtegidos: [dia(1)],             // ...mas ontem também foi "coberto"
+    cicloInicio: dia(25),
+  });
+  igual(escudosDisponiveis(d), 2, '26 dias dão 2 escudos, e nenhum foi gasto de verdade');
+});
+
+teste('falta de verdade continua gastando', () => {
+  const log = corrida(25, 0).filter((x) => x !== dia(5));   // faltou há 5 dias
+  const d = base({ logAcesso: log, diasProtegidos: [dia(5)], cicloInicio: dia(25) });
+  igual(escudosDisponiveis(d), 1, '2 ganhos − 1 gasto de verdade');
+});
+
+teste('a mistura: um gasto de verdade e três devolvidos', () => {
+  // Exatamente o arquivo do Thiago: quatro dias protegidos, três deles
+  // com visita registrada, e 2 de bônus.
+  const falta = dia(8);
+  const log = corrida(28, 0).filter((x) => x !== falta);
+  const d = base({
+    logAcesso: log,
+    diasProtegidos: [dia(21), dia(13), dia(12), falta],
+    escudoBonus: 2,
+    cicloInicio: dia(28),
+  });
+  igual(escudosDisponiveis(d), MAX_ESCUDOS, '2 ganhos + 2 bônus − 1 gasto = 3, o máximo');
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam\n`);
 process.exit(falhou ? 1 : 0);
