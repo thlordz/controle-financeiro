@@ -206,6 +206,16 @@ button,input,select { font-family:inherit; }
    mais claro: ela é um bilhete, não um rótulo. */
 .item__obs{display:block;font-size:12.5px;line-height:1.35;color:var(--apagado);margin-top:4px;
   overflow-wrap:anywhere}
+
+/* Cada linha da lista tem o seu próprio vidro, e vidro custa caro: o
+   navegador copia o fundo atrás dela, borra e compõe, uma passada por
+   elemento. Num mês cheio são sessenta passadas — e quase todas para
+   linhas que estão fora da tela. Daí o borrão chegar depois do resto
+   ao trocar de aba.
+   Isto manda o navegador pular o que não está à vista. A altura
+   declarada é a de uma linha comum, para a barra de rolagem não
+   pular enquanto ele descobre o tamanho de verdade. */
+.item{ content-visibility:auto; contain-intrinsic-size:auto 92px }
 .selo{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px}
 .selo--pendente{background:var(--ouro-fundo);color:var(--ouro-frente)}
 .selo--ok{background:var(--verde-fundo);color:var(--verde-frente)}

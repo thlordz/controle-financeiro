@@ -530,12 +530,28 @@ const rotuloDaSobra = (p) => ({
 })[estadoDaSobra(p)];
 const corDaSobra = (p) => ({ sobrando: 'verde', devendo: 'vermelha', zerado: 'ouro' })[estadoDaSobra(p)];
 
+/**
+ * Uma linha do quadro de contas.
+ *
+ * O valor vai sempre em módulo porque quem diz se soma ou subtrai é o
+ * sinal ao lado do nome: "+ o que ainda vai entrar", "− o que ainda
+ * vai sair". Só que havia um buraco nisso: a linha SEM sinal — o
+ * saldo que você tem hoje — também perdia o módulo, e um saldo
+ * negativo aparecia como se fosse positivo. R$ 1.170,00 no vermelho
+ * virava R$ 1.170,00 no azul, dentro do quadro que explica a conta.
+ *
+ * A linha de total é exceção de propósito: lá quem carrega o sinal é
+ * o título ("Quanto estou devendo"), e um menos ali seria negativa
+ * dupla.
+ */
 function linhaDaConta(nome, valor, sinal, total) {
   const classe = total ? ' conta__linha--total' : '';
   const cor = sinal === '+' ? ' conta__valor--mais' : (sinal === '−' ? ' conta__valor--menos' : '');
+  const negativo = !sinal && !total && Number(valor) < 0;
   return `<div class="conta__linha${classe}">
     <span class="conta__nome">${nome}</span>
-    <span class="conta__valor${cor} dinheiro">${sinal || ''}${real(Math.abs(valor))}</span>
+    <span class="conta__valor${cor}${negativo ? ' conta__valor--menos' : ''} dinheiro">${
+      sinal || (negativo ? '−' : '')}${real(Math.abs(valor))}</span>
   </div>`;
 }
 
@@ -572,6 +588,16 @@ function explicarSobra() {
       Serve pra uma coisa só: saber se dá pra gastar. Se está verde, sobra.
       Se está vermelho, falta.
     </p>
+
+    ${p.faltaReceber > 0 ? `<div class="perigo">
+      <p>
+        Cuidado com uma coisa: <b>${real(p.faltaReceber)}</b> desse número
+        ainda não entrou. ${p.saldo < 0
+          ? `Hoje a sua conta está <b>negativa em ${real(Math.abs(p.saldo))}</b>.`
+          : `Hoje, na conta mesmo, você tem <b>${real(p.saldo)}</b>.`}
+        O resto chega durante o mês.
+      </p>
+    </div>` : ''}
 
     <div class="conta">
       ${linhaDaConta('O que você tem hoje na conta', p.saldo, '')}
