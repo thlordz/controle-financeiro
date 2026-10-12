@@ -224,6 +224,9 @@ button,input,select { font-family:inherit; }
 .vazio{text-align:center;color:var(--apagado);padding:50px 20px;font-size:14.5px}
 
 .fichas{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+/* As fichas de data ficam coladas no campo que elas preenchem, sem o
+   espaço que separa as fichas de filtro das linhas da lista. */
+.fichas--data{margin:8px 0 0}
 .ficha{border:1px solid var(--linha);background:transparent;color:var(--apagado);border-radius:999px;
   padding:8px 15px;font:inherit;font-size:13.5px;cursor:pointer;transition:background 170ms,color 170ms,border-color 170ms}
 .ficha:hover{background:var(--cartao)}

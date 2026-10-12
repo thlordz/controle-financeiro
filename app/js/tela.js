@@ -1247,6 +1247,48 @@ function linhasDeDevedores() {
   }).join('');
 }
 
+/**
+ * Mudar a meta de investimento.
+ *
+ * O número existia desde o porte da planilha e aparecia na barra de
+ * progresso, mas não havia por onde mexer nele: só restaurando um
+ * backup. Quem quisesse guardar mais num mês não tinha o que fazer.
+ */
+function abrirMeta() {
+  const meta = D.config.metaInvestimento || 0;
+  mostrarFolha(`
+    <div class="folha__titulo">Sua meta</div>
+    <p class="explica">
+      Quanto você quer ter guardado. Serve pra barrinha ali de cima saber até
+      onde ir — não muda nada nas suas contas, é só um alvo.
+    </p>
+    <div class="campo">
+      <div class="campo__nome">Quanto você quer guardar?</div>
+      <input id="meta-valor" class="dinheiro" inputmode="decimal"
+             value="${meta.toFixed(2).replace('.',',')}">
+    </div>
+    <p class="explica explica--fraco">
+      Pode deixar em zero se não quiser meta nenhuma: aí a barrinha some.
+    </p>
+    <button class="principal" onclick="salvarMeta()">Pronto</button>
+    <div class="rodape-form">
+      <button class="secundario" onclick="fecharFolha()">Deixa pra lá</button>
+    </div>`);
+  ligarMascaras($('folha'));
+}
+
+function salvarMeta() {
+  const valor = pegarValor('meta-valor');
+  D.config.metaInvestimento = valor;
+  // A configuração viaja na sincronia pelo seu próprio carimbo: sem
+  // renovar, a meta nova perderia para a antiga no outro aparelho.
+  D.config.atualizadoEm = agora();
+  fecharFolha();
+  mexeuNosDados();
+  desenhar();
+  avisar(valor ? `Meta: ${real(valor)}` : 'Tirei a meta');
+}
+
 function telaInvestir() {
   const meta = D.config.metaInvestimento || 0;
   const total = totalInvestido();
@@ -1259,8 +1301,17 @@ function telaInvestir() {
         <span style="color:var(--apagado);font-size:13.5px">você já guardou · a meta é ${real(meta)}</span>
       </div>
       <div class="progresso"><div class="progresso__cheio" style="--ate:${fatia}%"></div></div>
-      <span style="font-size:12.5px;color:var(--apagado)">${fatia >= 100 ? 'Meta batida!' : `Faltam ${real(Math.max(0, meta-total))}`} · ${fatia.toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span>
+      <span style="font-size:12.5px;color:var(--apagado)">${meta
+        ? `${fatia >= 100 ? 'Meta batida!' : `Faltam ${real(Math.max(0, meta-total))}`} · ${fatia.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`
+        : 'Você ainda não escolheu uma meta'}</span>
     </div>
+    <button class="cartao" style="margin-bottom:10px" onclick="abrirMeta()">
+      <span class="pastilha pastilha--menta">${icone('porco')}</span>
+      <span class="cartao__meio">
+        <div class="chave__nome">${meta ? 'Mudar a meta' : 'Escolher uma meta'}</div>
+        <div class="chave__sub">${meta ? `Hoje ela é ${real(meta)}` : 'Quanto você quer guardar'}</div>
+      </span>
+    </button>
     <div class="titulo-secao">O que foi e o que veio</div>
     ${(() => {
       const itens = listaInvestimento();
@@ -1781,6 +1832,41 @@ function anexo(id, valor) {
 }
 
 /** Formulário de receita ou despesa, com todos os campos. */
+/**
+ * Atalhos de data: hoje, ontem e os dias antes deles pelo nome.
+ *
+ * Quase todo lançamento é de hoje ou de ontem, e abrir o calendário
+ * do sistema para escolher "anteontem" é trabalho demais para uma
+ * coisa tão comum. Os dias mais atrás aparecem pelo nome da semana,
+ * que é como a gente lembra: "isso eu paguei na quarta".
+ */
+const DIAS_DA_SEMANA = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+
+function fichasDeData(campo, atual) {
+  const h = hoje();
+  const atalhos = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(h.getFullYear(), h.getMonth(), h.getDate() - i);
+    const iso = paraISO(d);
+    const nome = i === 0 ? 'Hoje' : i === 1 ? 'Ontem'
+      : DIAS_DA_SEMANA[d.getDay()].replace(/^./, (c) => c.toUpperCase());
+    atalhos.push({ iso, nome });
+  }
+  return `<div class="fichas fichas--data">${atalhos.map((a) => `
+    <button type="button" class="ficha ${a.iso === atual ? 'ativa' : ''}"
+      onclick="porDataNoCampo('${campo}', '${a.iso}')">${a.nome}</button>`).join('')}</div>`;
+}
+
+/** Escreve a data no campo e repinta as fichas, sem refazer a folha. */
+function porDataNoCampo(campo, iso) {
+  const e = $(campo);
+  if (!e) return;
+  e.value = iso;
+  const caixa = e.closest('.campo');
+  const fichas = caixa && caixa.querySelector('.fichas--data');
+  if (fichas) fichas.outerHTML = fichasDeData(campo, iso);
+}
+
 function formulario(x, recebe, pre, semValor) {
   const st = recebe ? LISTAS.statusReceita : LISTAS.statusDespesa;
   return `
@@ -1788,6 +1874,7 @@ function formulario(x, recebe, pre, semValor) {
     ${semValor ? `<div class="campo">
         <div class="campo__nome">Quando foi?</div>
         <input id="${pre}-data" type="date" value="${x.data||''}">
+        ${fichasDeData(pre+'-data', x.data||'')}
       </div>` : `<div class="meia">
       <div class="campo">
         <div class="campo__nome">Quando foi?</div>
@@ -1798,7 +1885,8 @@ function formulario(x, recebe, pre, semValor) {
         <input id="${pre}-valor" class="dinheiro" inputmode="decimal"
                value="${(Number(x.valor)||0).toFixed(2).replace('.',',')}">
       </div>
-    </div>`}
+    </div>
+    <div class="campo">${fichasDeData(pre+'-data', x.data||'')}</div>`}
     <div class="campo">
       <div class="campo__nome">O que foi?</div>
       <input id="${pre}-desc" value="${escapar(x.descricao)}" placeholder="Mercado, salário, uber…">
@@ -3670,6 +3758,7 @@ Object.assign(window, {
   procurarAtualizacaoAgora, baixarVersaoNova,
   abrirCopiarFixos, copiarFixosAgora, sincronizarPeloBotao, testarBancoDosAjustes,
   abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
+  porDataNoCampo, abrirMeta, salvarMeta,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
