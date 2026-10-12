@@ -200,9 +200,22 @@ export function svgDoEscudo({ quebrando = false } = {}) {
 }
 
 /** O escudinho pequeno dos selos, do calendário e do cartão. */
+/**
+ * O escudo pequeno, do cartão da planta.
+ *
+ * Três peças: o corpo, um brilho na metade esquerda (é o que faz o
+ * formato ler como escudo e não como gota) e um visto no meio. A cor
+ * vem toda do CSS — o vazio é o mesmo desenho só com o contorno.
+ *
+ * Antes era um caminho só, sem `fill`: SVG sem preenchimento sai
+ * preto, então a cor definida no CSS nunca chegava ao desenho, e
+ * escudo cheio e vazio eram o mesmo borrão escuro.
+ */
 export function svgDoEscudoMini() {
   return `<svg class="escudo-mini" viewBox="0 0 100 100" aria-hidden="true">
-    <path d="M50 12 L82 24 V52 Q82 76 50 90 Q18 76 18 52 V24 Z"/>
+    <path class="escudo__corpo" d="M50 9 L84 22 V50 Q84 77 50 92 Q16 77 16 50 V22 Z"/>
+    <path class="escudo__brilho" d="M50 9 L16 22 V50 Q16 77 50 92 Z"/>
+    <path class="escudo__visto" d="M35 51 L46 62 L66 39"/>
   </svg>`;
 }
 
