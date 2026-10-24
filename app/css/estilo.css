@@ -240,6 +240,13 @@ button,input,select { font-family:inherit; }
   margin:-4px 0 12px;padding:9px 12px;border-radius:12px;background:var(--cartao-alto);
   font-size:13px;color:var(--apagado)}
 .filtro-resumo b{color:var(--texto);font-weight:600}
+/* As formas de pagamento no filtro: uma por linha, a caixa inteira
+   clicável, porque no celular a caixinha sozinha é pequena demais. */
+.marcadores{display:flex;flex-direction:column;gap:6px}
+.marcador{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;
+  background:var(--cartao-alto);cursor:pointer;font-size:14.5px}
+.marcador input{width:20px;height:20px;margin:0;accent-color:var(--menta);flex:none}
+.marcador:has(input:not(:checked)) span{color:var(--apagado);text-decoration:line-through}
 .filtro-resumo__limpar{flex:none;border:0;background:none;color:var(--menta);font:inherit;
   font-weight:600;cursor:pointer;padding:2px 4px}
 

@@ -83,7 +83,7 @@ const estado = {
   faturaInicio: false,   // o cartão da fatura na tela inicial
   mostrarObs: false,     // a observação embaixo de cada lançamento
   filtro: 'todos',
-  forma: '',         // só uma forma de pagamento, nas despesas ('' = todas)
+  formasFora: new Set(),  // formas DESMARCADAS no filtro das despesas (vazio = todas)
   selecao: new Set(),
   ajuste: null,    // seção aberta dentro dos Ajustes
 };
@@ -256,7 +256,7 @@ function ir(tela, doVoltar) {
   estado.tela = tela;
   estado.escolhido = null;
   estado.busca = '';
-  if (tela !== estado.telaDaForma) estado.forma = '';
+  if (tela !== estado.telaDaForma) estado.formasFora.clear();
   estado.selecao.clear();
   if (tela !== 'ajustes') estado.ajuste = null;
   desenhar();
@@ -932,8 +932,8 @@ function listaDoMes(qual) {
       if (estado.filtro === 'estornados') return texto(x.status) === 'estornado';
       return true;
     })
-    .filter((x) => qual !== 'despesas' || !estado.forma
-      || String(x.formaPgto || '') === estado.forma)
+    .filter((x) => qual !== 'despesas'
+      || !estado.formasFora.has(String(x.formaPgto || '').trim() || SEM_FORMA))
     .sort((a,b) => (b.data||'').localeCompare(a.data||''));
 }
 
@@ -990,20 +990,42 @@ const SITUACOES = [
   ['todos', 'Todos'], ['pendentes', 'Em aberto'], ['fixos', 'Fixos'], ['estornados', 'Estornados'],
 ];
 
-/** As formas que existem nas suas despesas, das mais usadas para as menos. */
+/**
+ * As formas que existem nas suas despesas, das mais usadas para as
+ * menos. Lançamento sem forma também vira uma opção: sem ela, quem
+ * desmarcasse tudo menos o Pix ainda veria os sem forma, e ficaria sem
+ * entender de onde eles vieram.
+ */
+const SEM_FORMA = 'Sem forma';
 function formasEmUso() {
   const conta = new Map();
   for (const x of D.despesas) {
-    const f = String(x.formaPgto || '').trim();
-    if (f) conta.set(f, (conta.get(f) || 0) + 1);
+    const f = String(x.formaPgto || '').trim() || SEM_FORMA;
+    conta.set(f, (conta.get(f) || 0) + 1);
   }
-  return [...conta.entries()].sort((a, b) => b[1] - a[1]).map(([f]) => f);
+  return [...conta.entries()]
+    .sort((a, b) => (a[0] === SEM_FORMA) - (b[0] === SEM_FORMA) || b[1] - a[1])
+    .map(([f]) => f);
+}
+
+/**
+ * Como dizer o que o filtro está mostrando, do jeito mais curto: se
+ * tirou pouca coisa, diz o que tirou ("Sem crédito"); se ficou pouca,
+ * diz o que ficou ("Só Pix e débito").
+ */
+function rotuloDasFormas() {
+  const todas = formasEmUso();
+  const fora = todas.filter((f) => estado.formasFora.has(f));
+  const dentro = todas.filter((f) => !estado.formasFora.has(f));
+  const juntar = (l) => l.length <= 2 ? l.join(' e ') : `${l.slice(0, 2).join(', ')} e mais ${l.length - 2}`;
+  if (!dentro.length) return 'Nenhuma forma';
+  return fora.length <= dentro.length ? `Sem ${juntar(fora)}` : `Só ${juntar(dentro)}`;
 }
 
 function filtrosAtivos() {
   const lista = [];
   if (estado.filtro !== 'todos') lista.push(SITUACOES.find(([k]) => k === estado.filtro)?.[1] || estado.filtro);
-  if (estado.tela === 'despesas' && estado.forma) lista.push(estado.forma);
+  if (estado.tela === 'despesas' && estado.formasFora.size) lista.push(rotuloDasFormas());
   return lista;
 }
 
@@ -1030,11 +1052,17 @@ function abrirFiltro() {
       ficha(estado.filtro === k, nome, `escolherSituacao('${k}')`)).join('')}</div>
     ${despesas ? `
     <div class="secao-form__nome">Forma de pagamento</div>
-    <div class="fichas">
-      ${ficha(!estado.forma, 'Todas', `escolherForma('')`)}
-      ${formasEmUso().map((f) =>
-        ficha(estado.forma === f, f, `escolherForma(${JSON.stringify(f).replace(/"/g, '&quot;')})`)).join('')}
-    </div>` : ''}
+    <p class="explica explica--fraco" style="margin-top:0">Desmarca o que você não quer ver.</p>
+    <div class="marcadores">
+      ${formasEmUso().map((f) => `
+        <label class="marcador">
+          <input type="checkbox" ${estado.formasFora.has(f) ? '' : 'checked'}
+                 onchange="alternarForma(${JSON.stringify(f).replace(/"/g, '&quot;')}, this.checked)">
+          <span>${escapar(f)}</span>
+        </label>`).join('')}
+    </div>
+    ${estado.formasFora.size ? `<button class="secundario" style="width:100%;margin-top:8px"
+        onclick="marcarTodasAsFormas()">Marcar todas de novo</button>` : ''}` : ''}
     <button class="principal" onclick="fecharFolha()">Pronto</button>
     <div class="rodape-form">
       <button class="secundario" onclick="limparFiltro(); fecharFolha()">Tirar todos os filtros</button>
@@ -1043,13 +1071,18 @@ function abrirFiltro() {
 
 /** Cada toque vale na hora e a folha continua aberta: dá para combinar. */
 function escolherSituacao(k) { estado.filtro = k; redesenharLista(); abrirFiltro(); }
-function escolherForma(f) {
-  estado.forma = f;
+function alternarForma(f, aparece) {
+  if (aparece) estado.formasFora.delete(f); else estado.formasFora.add(f);
   estado.telaDaForma = estado.tela;
   redesenharLista();
-  abrirFiltro();
+  // Não redesenha a folha a cada clique: o checkbox já mudou sozinho,
+  // e refazer a folha piscaria. Só o botão "marcar todas" precisa
+  // aparecer ou sumir, e para isso basta reabrir quando ele muda.
+  const temBotao = Boolean(document.querySelector('#folha .marcadores + button'));
+  if (temBotao !== Boolean(estado.formasFora.size)) abrirFiltro();
 }
-function limparFiltro() { estado.filtro = 'todos'; estado.forma = ''; redesenharLista(); }
+function marcarTodasAsFormas() { estado.formasFora.clear(); redesenharLista(); abrirFiltro(); }
+function limparFiltro() { estado.filtro = 'todos'; estado.formasFora.clear(); redesenharLista(); }
 
 function linhasDaTela() {
   if (estado.tela === 'devedores') return linhasDeDevedores();
@@ -1114,7 +1147,7 @@ function vazioOuNadaAchado() {
   if (estado.filtro === 'pendentes') return `<div class="vazio">Nada em aberto. Tudo pago!</div>`;
   if (estado.filtro === 'fixos') return `<div class="vazio">Nenhum lançamento fixo neste mês.</div>`;
   if (estado.filtro === 'estornados') return `<div class="vazio">Nada estornado neste mês.</div>`;
-  if (estado.forma) return `<div class="vazio">Nada no ${escapar(estado.forma).toLowerCase()} neste mês.</div>`;
+  if (estado.formasFora.size) return `<div class="vazio">Nada com essas formas de pagamento neste mês.</div>`;
   return `<div class="vazio">${MESES[estado.mes]} está vazio por aqui.<br>Bora lançar o primeiro?</div>`;
 }
 
@@ -3909,7 +3942,7 @@ Object.assign(window, {
   abrirCopiarFixos, copiarFixosAgora, sincronizarPeloBotao, testarBancoDosAjustes,
   abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
   porDataNoCampo, abrirMeta, salvarMeta, virarEstorno,
-  abrirFiltro, escolherSituacao, escolherForma, limparFiltro,
+  abrirFiltro, escolherSituacao, alternarForma, marcarTodasAsFormas, limparFiltro,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
