@@ -35,6 +35,7 @@ import {
 import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 import { temVersaoNova, versaoLaFora } from './atualizacao.js';
 import { salvarArquivo } from './arquivos.js';
+import { MODOS, movimentos, extratoCsv, relatorioTexto, nomeDoArquivo } from './exportar.js';
 
 /** No aparelho mesmo, não no navegador nem no Electron. */
 const noCelular = () => Boolean(window.Capacitor?.isNativePlatform?.());
@@ -1400,6 +1401,115 @@ function linhasDeDevedores() {
   });
 }
 
+/* ===================================================================
+   Conferir com o banco
+
+   O app gera o mesmo tipo de arquivo que o banco: um extrato em CSV,
+   linha por linha, para os dois ficarem lado a lado; e um relatório
+   em texto, para ler. Quem decide o que entra é o exportar.js — aqui
+   é só escolher o recorte e mandar salvar.
+   =================================================================== */
+const exportar = { modo: 'conta', de: '', ate: '' };
+
+/** O mês que está na tela, do dia 1º ao último. */
+function periodoDoMes(ano, mes) {
+  const fim = new Date(ano, mes + 1, 0).getDate();
+  const mm = String(mes + 1).padStart(2, '0');
+  return { de: `${ano}-${mm}-01`, ate: `${ano}-${mm}-${String(fim).padStart(2, '0')}` };
+}
+
+function telaDeConferir() {
+  if (!exportar.de) Object.assign(exportar, periodoDoMes(estado.ano, estado.mes));
+  const movs = movimentos(D, exportar);
+  const anterior = estado.mes === 0
+    ? periodoDoMes(estado.ano - 1, 11) : periodoDoMes(estado.ano, estado.mes - 1);
+  const deste = periodoDoMes(estado.ano, estado.mes);
+  const ficha = (ativa, rotulo, acao) =>
+    `<button class="ficha ${ativa ? 'ativa' : ''}" onclick="${acao}">${rotulo}</button>`;
+
+  return `
+    <p class="explica" style="margin-top:0">
+      Gera um arquivo igual ao que o banco te dá. Dá pra comparar você mesmo, ou
+      mandar os dois pra uma IA: o relatório já vai com as instruções pra ela.
+    </p>
+
+    <div class="secao-form__nome">O que você vai conferir?</div>
+    <div class="marcadores">${Object.entries(MODOS).map(([k, m]) => `
+      <label class="marcador marcador--opcao">
+        <input type="radio" name="exp-modo" ${exportar.modo === k ? 'checked' : ''}
+               onchange="mudarExportar('modo', '${k}')">
+        <span><b>${m.nome}</b><br><span class="explica--fraco" style="font-size:12.5px">${m.explica}</span></span>
+      </label>`).join('')}
+    </div>
+
+    <div class="secao-form__nome">De quando?</div>
+    <div class="fichas">
+      ${ficha(exportar.de === deste.de && exportar.ate === deste.ate, 'Este mês',
+        `mudarExportar('periodo', '${deste.de}|${deste.ate}')`)}
+      ${ficha(exportar.de === anterior.de && exportar.ate === anterior.ate, 'Mês passado',
+        `mudarExportar('periodo', '${anterior.de}|${anterior.ate}')`)}
+    </div>
+    <div class="meia">
+      <div class="campo">
+        <div class="campo__nome">De</div>
+        <input type="date" value="${exportar.de}" onchange="mudarExportar('de', this.value)">
+      </div>
+      <div class="campo">
+        <div class="campo__nome">Até</div>
+        <input type="date" value="${exportar.ate}" onchange="mudarExportar('ate', this.value)">
+      </div>
+    </div>
+    <p class="explica explica--fraco" style="margin-top:4px">
+      Põe as mesmas datas do arquivo do banco. A fatura do Nubank, por
+      exemplo, não vai do dia 1º ao 31: vai do fechamento ao fechamento.
+    </p>
+
+    <div class="recado">${movs.length
+      ? `${movs.length} ${movs.length === 1 ? 'lançamento entra' : 'lançamentos entram'} nesse recorte.`
+      : 'Nenhum lançamento nesse recorte.'}</div>
+
+    <button class="principal" style="margin-top:14px" onclick="baixarExtrato()" ${movs.length ? '' : 'disabled'}>
+      Baixar o extrato (CSV)
+    </button>
+    <button class="secundario" style="width:100%;margin-top:10px" onclick="baixarRelatorio()">
+      Baixar o relatório
+    </button>`;
+}
+
+function mudarExportar(campo, valor) {
+  if (campo === 'periodo') { const [de, ate] = valor.split('|'); Object.assign(exportar, { de, ate }); }
+  else exportar[campo] = valor;
+  // Período ao contrário não faz sentido; em vez de reclamar, desvira.
+  if (exportar.de && exportar.ate && exportar.de > exportar.ate) {
+    [exportar.de, exportar.ate] = [exportar.ate, exportar.de];
+  }
+  desenhar();
+}
+
+async function baixarExtrato() {
+  const csv = extratoCsv(movimentos(D, exportar));
+  // O BOM no começo é o que faz o Excel e o LibreOffice abrirem os
+  // acentos certos em vez de "CartÃ£o de CrÃ©dito".
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  await salvarEAvisar(blob, nomeDoArquivo(exportar.modo, exportar.de, exportar.ate, 'csv'), 'Extrato');
+}
+
+async function baixarRelatorio() {
+  const txt = relatorioTexto(D, exportar, new Date());
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  await salvarEAvisar(blob, nomeDoArquivo(exportar.modo, exportar.de, exportar.ate, 'txt'), 'Relatório');
+}
+
+async function salvarEAvisar(blob, nome, oque) {
+  try {
+    const foi = await salvarArquivo(blob, nome);
+    if (!foi) { avisar('Você fechou sem salvar'); return; }
+    avisar(noCelular() ? `${oque} pronto, escolhe onde guardar` : `${oque} salvo`);
+  } catch (e) {
+    avisar(`Não consegui salvar: ${e?.message || e}`);
+  }
+}
+
 /**
  * Mudar a meta de investimento.
  *
@@ -1523,6 +1633,7 @@ const SECOES_AJUSTES = {
   planta:    { nome: 'A plantinha',     icone: 'planta',     cor: 'verde' },
   banco:     { nome: 'Seu banco',       icone: 'cartao',     cor: 'menta' },
   backup:    { nome: 'Backup',          icone: 'clipe',      cor: 'ouro' },
+  conferir:  { nome: 'Conferir com o banco', icone: 'check',  cor: 'verde' },
   sobre:     { nome: 'Sobre o app',     icone: 'ajuda',      cor: 'menta' },
   apagar:    { nome: 'Apagar tudo',     icone: 'fogo',       cor: 'vermelha' },
 };
@@ -1539,6 +1650,7 @@ function resumoDaSecao(chave) {
       : 'Desligada',
     banco: c && c.ligado ? 'Ligado' : 'Só neste aparelho',
     backup: 'Guardar ou trazer de volta',
+    conferir: 'Exportar pra comparar com o extrato',
     sobre: `Versão ${VERSAO}`,
     apagar: 'Some com tudo e recomeça',
   }[chave];
@@ -1862,6 +1974,8 @@ function secaoDeAjuste(chave) {
       <p class="explica explica--fraco">
         Vale guardar um de vez em quando, principalmente antes de trocar de celular.
       </p>`,
+
+    conferir: () => telaDeConferir(),
 
     sobre: () => `
       <div class="cartao" style="cursor:default">
@@ -3943,6 +4057,7 @@ Object.assign(window, {
   abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
   porDataNoCampo, abrirMeta, salvarMeta, virarEstorno,
   abrirFiltro, escolherSituacao, alternarForma, marcarTodasAsFormas, limparFiltro,
+  mudarExportar, baixarExtrato, baixarRelatorio,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
