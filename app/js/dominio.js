@@ -14,6 +14,12 @@ import { statusDevedor, intervaloDoMes } from './calculos.js';
 export const STATUS_RECEITA = ['Recebido', 'Pendente'];
 export const STATUS_DESPESA = ['Pago', 'Pendente', 'Aguardando'];
 
+/**
+ * O estado de quem voltou. Não entra na lista acima de propósito: ele
+ * não é uma escolha do dia a dia, é um botão próprio no lançamento.
+ */
+export const ESTORNADO = 'Estornado';
+
 export const CATEGORIAS_RECEITA =
   ['Renda fixa', 'Renda extra', 'Presente', 'Investimento', 'Empréstimo'];
 

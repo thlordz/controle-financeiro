@@ -18,7 +18,7 @@ import {
 } from './planta.js';
 import { svgDaPlanta, svgDoEscudoMini } from './plantaSvg.js';
 import {
-  novoId, carimbar, agora, registrarRemocao,
+  novoId, carimbar, agora, registrarRemocao, ESTORNADO,
   copiarFixasReceitas, copiarFixasDespesas, copiarRecorrentesDevedores,
   fixasReceitasACopiar, fixasDespesasACopiar, recorrentesACopiar,
   mesAnterior, proximoMes,
@@ -83,6 +83,7 @@ const estado = {
   faturaInicio: false,   // o cartão da fatura na tela inicial
   mostrarObs: false,     // a observação embaixo de cada lançamento
   filtro: 'todos',
+  forma: '',         // só uma forma de pagamento, nas despesas ('' = todas)
   selecao: new Set(),
   ajuste: null,    // seção aberta dentro dos Ajustes
 };
@@ -255,6 +256,7 @@ function ir(tela, doVoltar) {
   estado.tela = tela;
   estado.escolhido = null;
   estado.busca = '';
+  if (tela !== estado.telaDaForma) estado.forma = '';
   estado.selecao.clear();
   if (tela !== 'ajustes') estado.ajuste = null;
   desenhar();
@@ -925,10 +927,13 @@ function listaDoMes(qual) {
     .filter((x) => noMes(x.data))
     .filter((x) => combina(x, CAMPOS_BUSCA[qual], busca))
     .filter((x) => {
-      if (estado.filtro === 'pendentes') return !['pago','recebido'].includes(texto(x.status));
+      if (estado.filtro === 'pendentes') return !['pago','recebido','estornado'].includes(texto(x.status));
       if (estado.filtro === 'fixos') return texto(x.fixa) === 'sim';
+      if (estado.filtro === 'estornados') return texto(x.status) === 'estornado';
       return true;
     })
+    .filter((x) => qual !== 'despesas' || !estado.forma
+      || String(x.formaPgto || '') === estado.forma)
     .sort((a,b) => (b.data||'').localeCompare(a.data||''));
 }
 
@@ -974,6 +979,78 @@ function telaLancamentos(qual, p) {
  * destruído junto e o Android fechava o teclado: dava para digitar
  * uma letra por vez, tocando no campo de novo entre elas.
  */
+/* ---------------- o filtro ----------------
+   Eram três fichas soltas — Todos, Em aberto, Fixos — que já ocupavam
+   duas linhas no celular. Pedir mais uma dimensão (a forma de
+   pagamento) não cabia ali. Elas viraram um botão só, que abre as
+   opções, e o que está valendo aparece numa linha embaixo, com a soma:
+   filtrar por crédito é, quase sempre, conferir a fatura.
+   ------------------------------------------ */
+const SITUACOES = [
+  ['todos', 'Todos'], ['pendentes', 'Em aberto'], ['fixos', 'Fixos'], ['estornados', 'Estornados'],
+];
+
+/** As formas que existem nas suas despesas, das mais usadas para as menos. */
+function formasEmUso() {
+  const conta = new Map();
+  for (const x of D.despesas) {
+    const f = String(x.formaPgto || '').trim();
+    if (f) conta.set(f, (conta.get(f) || 0) + 1);
+  }
+  return [...conta.entries()].sort((a, b) => b[1] - a[1]).map(([f]) => f);
+}
+
+function filtrosAtivos() {
+  const lista = [];
+  if (estado.filtro !== 'todos') lista.push(SITUACOES.find(([k]) => k === estado.filtro)?.[1] || estado.filtro);
+  if (estado.tela === 'despesas' && estado.forma) lista.push(estado.forma);
+  return lista;
+}
+
+function resumoDoFiltro(itens) {
+  const ativos = filtrosAtivos();
+  if (!ativos.length) return '';
+  const soma = itens.filter((x) => !estornado(x)).reduce((t, x) => t + (Number(x.valor) || 0), 0);
+  return `<div class="filtro-resumo">
+    <span><b>${ativos.map(escapar).join(' · ')}</b> — ${itens.length}
+      ${itens.length === 1 ? 'lançamento' : 'lançamentos'} ·
+      <span style="white-space:nowrap">${real(soma)}</span></span>
+    <button class="filtro-resumo__limpar" onclick="limparFiltro()">Limpar</button>
+  </div>`;
+}
+
+function abrirFiltro() {
+  const despesas = estado.tela === 'despesas';
+  const ficha = (ativa, rotulo, acao) =>
+    `<button class="ficha ${ativa ? 'ativa' : ''}" onclick="${acao}">${escapar(rotulo)}</button>`;
+  mostrarFolha(`
+    <div class="folha__titulo">Filtrar</div>
+    <div class="secao-form__nome">Situação</div>
+    <div class="fichas">${SITUACOES.map(([k, nome]) =>
+      ficha(estado.filtro === k, nome, `escolherSituacao('${k}')`)).join('')}</div>
+    ${despesas ? `
+    <div class="secao-form__nome">Forma de pagamento</div>
+    <div class="fichas">
+      ${ficha(!estado.forma, 'Todas', `escolherForma('')`)}
+      ${formasEmUso().map((f) =>
+        ficha(estado.forma === f, f, `escolherForma(${JSON.stringify(f).replace(/"/g, '&quot;')})`)).join('')}
+    </div>` : ''}
+    <button class="principal" onclick="fecharFolha()">Pronto</button>
+    <div class="rodape-form">
+      <button class="secundario" onclick="limparFiltro(); fecharFolha()">Tirar todos os filtros</button>
+    </div>`);
+}
+
+/** Cada toque vale na hora e a folha continua aberta: dá para combinar. */
+function escolherSituacao(k) { estado.filtro = k; redesenharLista(); abrirFiltro(); }
+function escolherForma(f) {
+  estado.forma = f;
+  estado.telaDaForma = estado.tela;
+  redesenharLista();
+  abrirFiltro();
+}
+function limparFiltro() { estado.filtro = 'todos'; estado.forma = ''; redesenharLista(); }
+
 function linhasDaTela() {
   if (estado.tela === 'devedores') return linhasDeDevedores();
   const recebe = estado.tela === 'receitas';
@@ -982,10 +1059,10 @@ function linhasDaTela() {
     <div class="fichas">
       <button class="ficha" onclick="abrirParcelar()">${icone('parcela',15)} Parcelar</button>
       ${fichaDeCopiar()}
-      <button class="ficha ${estado.filtro==='todos'?'ativa':''}" onclick="estado.filtro='todos'; redesenharLista()">Todos</button>
-      <button class="ficha ${estado.filtro==='pendentes'?'ativa':''}" onclick="estado.filtro='pendentes'; redesenharLista()">Em aberto</button>
-      <button class="ficha ${estado.filtro==='fixos'?'ativa':''}" onclick="estado.filtro='fixos'; redesenharLista()">Fixos</button>
+      <button class="ficha ${filtrosAtivos().length ? 'ativa' : ''}" onclick="abrirFiltro()">
+        ${icone('filtro',15)} Filtrar${filtrosAtivos().length ? ` · ${filtrosAtivos().length}` : ''}</button>
     </div>
+    ${resumoDoFiltro(itens)}
     ${barraDeSelecao(recebe)}
     ${itens.length ? agruparPorDia(itens, (x) => linhaLancamento(x, recebe))
       : vazioOuNadaAchado()}`;
@@ -1036,11 +1113,14 @@ function vazioOuNadaAchado() {
   if (estado.busca) return `<div class="vazio">Nada com "${escapar(estado.busca)}" aqui.</div>`;
   if (estado.filtro === 'pendentes') return `<div class="vazio">Nada em aberto. Tudo pago!</div>`;
   if (estado.filtro === 'fixos') return `<div class="vazio">Nenhum lançamento fixo neste mês.</div>`;
+  if (estado.filtro === 'estornados') return `<div class="vazio">Nada estornado neste mês.</div>`;
+  if (estado.forma) return `<div class="vazio">Nada no ${escapar(estado.forma).toLowerCase()} neste mês.</div>`;
   return `<div class="vazio">${MESES[estado.mes]} está vazio por aqui.<br>Bora lançar o primeiro?</div>`;
 }
 
 /** Verde quando quitado, azul quando ainda não caiu na fatura, ouro no resto. */
 function classeDoSelo(x, bom) {
+  if (estornado(x)) return 'selo--estornado';
   if (bom) return 'selo--ok';
   if (texto(x.status) === 'aguardando') return 'selo--aguardando';
   return 'selo--pendente';
@@ -1050,14 +1130,14 @@ function linhaLancamento(x, recebe) {
   const s = texto(x.status);
   const bom = recebe ? s === 'recebido' : s === 'pago';
   const marcado = estado.selecao.has(x.id);
-  return `<div class="item item--recuado ${estado.escolhido===x.id?'escolhido':''} ${marcado?'item--marcado':''}"
+  return `<div class="item item--recuado ${estado.escolhido===x.id?'escolhido':''} ${marcado?'item--marcado':''} ${estornado(x)?'item--estornado':''}"
        onclick="abrir('${x.id}')">
     <label class="marcar" onclick="event.stopPropagation()" title="Marcar esse">
       <input type="checkbox" ${marcado?'checked':''} onchange="marcar('${x.id}', this.checked)">
     </label>
     <span class="item__linha1">
       <button class="selo selo--clicavel ${classeDoSelo(x, bom)}"
-        onclick="event.stopPropagation(); virarStatus('${x.id}')"
+        onclick="event.stopPropagation(); ${estornado(x) ? `abrir('${x.id}')` : `virarStatus('${x.id}')`}"
         title="${noCredito(x) && !recebe
           ? 'Toca pra girar: pago, aguardando, pendente'
           : 'Toca aqui pra marcar como pago'}">${x.status||''}</button>
@@ -2022,12 +2102,44 @@ function abrir(id) {
   const recebe = D.receitas.includes(x);
   mostrarFolha(`
     <div class="folha__titulo">${x.descricao||'Lançamento'}</div>
+    ${!recebe && estornado(x) ? `<div class="perigo"><p>
+      Esse foi <b>estornado</b>: o dinheiro voltou, então ele não conta em
+      nenhuma soma. Fica aqui só pra você lembrar que aconteceu.
+    </p></div>` : ''}
     ${formulario(x, recebe, 'fol')}
     <button class="principal" onclick="salvar('fol')">Pode salvar</button>
+    ${recebe ? '' : `<button class="secundario" style="width:100%;margin-top:10px"
+        onclick="virarEstorno('${x.id}')">
+        ${estornado(x) ? 'Desfazer o estorno' : 'Foi estornado'}</button>`}
     <div class="rodape-form">
       <button class="secundario" onclick="fecharFolha()">Deixa pra lá</button>
       <button class="apagar" onclick="excluir('${x.id}')">Apagar</button>
     </div>`);
+}
+
+/**
+ * Estorno: a compra aconteceu e o dinheiro voltou.
+ *
+ * Apagar resolveria a conta, mas apagaria também a lembrança — e é
+ * justamente o estorno que se quer conferir depois, na fatura, quando
+ * a linha de crédito aparece do lado da cobrança. Então ele fica, com
+ * selo próprio, e some das somas (quem decide isso é o calculos.js).
+ *
+ * Desfazer devolve para "Pendente", que é o estado neutro: quem estava
+ * pago antes do estorno marca de novo num toque no selo.
+ */
+const estornado = (x) => texto(x?.status) === texto(ESTORNADO);
+
+function virarEstorno(id) {
+  const x = achar(id);
+  if (!x) return;
+  const voltou = estornado(x);
+  x.status = voltou ? 'Pendente' : ESTORNADO;
+  fecharFolha();
+  estado.escolhido = null;
+  mexeuNosDados(x);
+  desenhar();
+  avisar(voltou ? 'Voltou a contar' : 'Estornado: não conta mais');
 }
 
 function pegar(id) { const e = $(id); return e ? e.value : ''; }
@@ -3796,7 +3908,8 @@ Object.assign(window, {
   procurarAtualizacaoAgora, baixarVersaoNova,
   abrirCopiarFixos, copiarFixosAgora, sincronizarPeloBotao, testarBancoDosAjustes,
   abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
-  porDataNoCampo, abrirMeta, salvarMeta,
+  porDataNoCampo, abrirMeta, salvarMeta, virarEstorno,
+  abrirFiltro, escolherSituacao, escolherForma, limparFiltro,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,

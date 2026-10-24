@@ -75,6 +75,12 @@ export function calcularPainel(dados, ano, mes) {
     const status = texto(d.status);
     const forma = String(d.formaPgto || '');
 
+    // Estornado é compra que voltou: ela aconteceu, mas o dinheiro não
+    // saiu. Fica no app para você ver o histórico e não conta em nada.
+    // Pago, pendente e aguardando já a deixavam de fora por não serem
+    // ela; o total do mês é o único que somava tudo e precisa saber.
+    if (status === 'estornado') continue;
+
     // Despesa do mês: todas (inclui Aguardando)
     despesaMes += valor;
 

@@ -221,12 +221,27 @@ button,input,select { font-family:inherit; }
 .selo--ok{background:var(--verde-fundo);color:var(--verde-frente)}
 .selo--atrasado{background:var(--vermelho-fundo);color:var(--vermelho-frente)}
 .selo--aguardando{background:var(--azul-fundo);color:var(--azul-frente)}
+/* Estornado: aconteceu, mas não conta. Cinza, e o valor riscado — é o
+   jeito mais rápido de o olho entender "isso aqui não soma". */
+.selo--estornado{background:var(--cartao-alto);color:var(--apagado)}
+.item--estornado .item__valor{text-decoration:line-through;color:var(--apagado)}
+.item--estornado .item__nome{color:var(--apagado)}
 .vazio{text-align:center;color:var(--apagado);padding:50px 20px;font-size:14.5px}
 
 .fichas{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 /* As fichas de data ficam coladas no campo que elas preenchem, sem o
    espaço que separa as fichas de filtro das linhas da lista. */
 .fichas--data{margin:8px 0 0}
+
+/* O que o filtro está mostrando, e quanto soma. Fica embaixo das
+   fichas, com fundo próprio para ler sobre foto, e some quando não há
+   filtro nenhum. */
+.filtro-resumo{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:-4px 0 12px;padding:9px 12px;border-radius:12px;background:var(--cartao-alto);
+  font-size:13px;color:var(--apagado)}
+.filtro-resumo b{color:var(--texto);font-weight:600}
+.filtro-resumo__limpar{flex:none;border:0;background:none;color:var(--menta);font:inherit;
+  font-weight:600;cursor:pointer;padding:2px 4px}
 
 /* O título de cada dia na lista. Discreto de propósito: ele separa,
    não compete com os lançamentos. Gruda no topo ao rolar, para você
