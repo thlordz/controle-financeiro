@@ -246,6 +246,9 @@ button,input,select { font-family:inherit; }
 .marcador{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;
   background:var(--cartao-alto);cursor:pointer;font-size:14.5px}
 .marcador input{width:20px;height:20px;margin:0;accent-color:var(--menta);flex:none}
+/* Segurar em cima não pode selecionar o texto nem abrir o menu do
+   Android: o gesto é nosso. */
+.marcador[data-forma]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .marcador:has(input:not(:checked)) span{color:var(--apagado);text-decoration:line-through}
 /* Quando o marcador é uma escolha entre opções (rádio), desmarcado não
    é "tirado": não risca, só fica mais quieto. E o texto pode ter duas

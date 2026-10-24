@@ -1053,10 +1053,12 @@ function abrirFiltro() {
       ficha(estado.filtro === k, nome, `escolherSituacao('${k}')`)).join('')}</div>
     ${despesas ? `
     <div class="secao-form__nome">Forma de pagamento</div>
-    <p class="explica explica--fraco" style="margin-top:0">Desmarca o que você não quer ver.</p>
+    <p class="explica explica--fraco" style="margin-top:0">
+      Desmarca o que você não quer ver. Pra ver só uma, ${noCelular() ? 'segura em cima dela' : 'clica nela com o botão direito'}.
+    </p>
     <div class="marcadores">
       ${formasEmUso().map((f) => `
-        <label class="marcador">
+        <label class="marcador" data-forma="${escapar(f)}">
           <input type="checkbox" ${estado.formasFora.has(f) ? '' : 'checked'}
                  onchange="alternarForma(${JSON.stringify(f).replace(/"/g, '&quot;')}, this.checked)">
           <span>${escapar(f)}</span>
@@ -1068,6 +1070,70 @@ function abrirFiltro() {
     <div class="rodape-form">
       <button class="secundario" onclick="limparFiltro(); fecharFolha()">Tirar todos os filtros</button>
     </div>`);
+  ligarSoEssa($('folha'));
+}
+
+/**
+ * "Só essa": botão direito no PC, segurar no celular.
+ *
+ * No navegador os dois viram o mesmo evento, `contextmenu`. Só que
+ * dentro do app Android ele nem sempre chega — o WebView às vezes
+ * prefere selecionar texto —, então o segurar também é medido na mão,
+ * com um relógio. O que disparar primeiro vale; o outro é ignorado.
+ *
+ * O cuidado é o clique que vem depois. Ao soltar o dedo, o navegador
+ * entrega um clique comum, e ele marcaria ou desmarcaria a caixa logo
+ * depois de o "só essa" ter arrumado todas. Por isso, depois de um
+ * gesto longo, o próximo clique naquela linha é engolido.
+ */
+const ESPERA_SEGURAR = 450;
+
+function ligarSoEssa(onde) {
+  for (const linha of onde.querySelectorAll('.marcador[data-forma]')) {
+    const forma = linha.dataset.forma;
+    let relogio = null;
+    let disparou = false;
+
+    const disparar = () => {
+      if (disparou) return;
+      disparou = true;
+      try { navigator.vibrate?.(15); } catch { /* sem vibração, tudo bem */ }
+      soEssaForma(forma);
+    };
+
+    linha.addEventListener('contextmenu', (e) => { e.preventDefault(); disparar(); });
+    linha.addEventListener('touchstart', () => {
+      disparou = false;
+      clearTimeout(relogio);
+      relogio = setTimeout(disparar, ESPERA_SEGURAR);
+    }, { passive: true });
+    const cancelar = () => clearTimeout(relogio);
+    linha.addEventListener('touchmove', cancelar, { passive: true });
+    linha.addEventListener('touchcancel', cancelar, { passive: true });
+    linha.addEventListener('touchend', (e) => {
+      cancelar();
+      if (disparou) e.preventDefault();      // engole o clique que viria agora
+    });
+    linha.addEventListener('click', (e) => {
+      if (!disparou) return;
+      e.preventDefault();
+      disparou = false;
+    }, true);
+  }
+}
+
+/**
+ * Deixa só essa forma marcada. Se ela já era a única, volta tudo:
+ * fazer o gesto de novo é o jeito natural de desfazer.
+ */
+function soEssaForma(forma) {
+  const todas = formasEmUso();
+  const jaEraSoEla = todas.every((f) => (f === forma) !== estado.formasFora.has(f));
+  estado.formasFora = jaEraSoEla ? new Set() : new Set(todas.filter((f) => f !== forma));
+  estado.telaDaForma = estado.tela;
+  redesenharLista();
+  abrirFiltro();
+  avisar(jaEraSoEla ? 'Todas de novo' : `Só ${forma}`);
 }
 
 /** Cada toque vale na hora e a folha continua aberta: dá para combinar. */
