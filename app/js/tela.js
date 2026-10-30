@@ -262,6 +262,7 @@ function ir(tela, doVoltar) {
   estado.escolhido = null;
   estado.busca = '';
   marcarPeloTeclado.ligado = false;
+  marcarPeloTeclado.buscaNovaNaProxima = false;
   if (tela !== estado.telaDaForma) estado.formasFora.clear();
   estado.selecao.clear();
   if (tela !== 'ajustes') estado.ajuste = null;
@@ -1517,8 +1518,8 @@ function salvarVarios() {
 
    Ideia do Thiago: pesquisar, e marcar os resultados sem mouse. F1
    ou Ctrl+M liga o modo; cada lançamento da lista ganha um número;
-   digitar o número marca ou desmarca. Com algo marcado, P paga, E
-   estorna, A apaga (pedindo confirmação). Esc sai.
+   digitar o número marca ou desmarca. Com algo marcado, Shift+P paga,
+   Shift+E estorna, Shift+A apaga (pedindo confirmação). Esc sai.
 
    Mais de nove na lista pede dois algarismos. Para não obrigar a
    esperar sempre, o número vale na hora quando não tem como ser
@@ -1532,7 +1533,17 @@ function salvarVarios() {
 const marcarPeloTeclado = {
   ligado: false, digitos: '', relogio: null,
   numeroParaId: new Map(), idParaNumero: new Map(),
+  // Depois de marcar, a próxima palavra começa uma busca nova: quem
+  // marcou os "tiktok" e digita "claro" quer achar o Claro, e não
+  // procurar "tiktokclaro".
+  buscaNovaNaProxima: false,
 };
+
+function limparBuscaParaANova() {
+  marcarPeloTeclado.buscaNovaNaProxima = false;
+  estado.busca = '';
+  document.querySelectorAll('.busca input').forEach((i) => { i.value = ''; });
+}
 const ESPERA_DOIS_DIGITOS = 450;
 
 function faixaDoModoMarcar(itens, recebe) {
@@ -1543,9 +1554,9 @@ function faixaDoModoMarcar(itens, recebe) {
     <span><b>Modo marcar</b> · digita o número
       <span id="modo-marcar-digitos" class="modo-marcar__digitos">${marcarPeloTeclado.digitos}</span></span>
     <span class="modo-marcar__teclas">
-      <kbd>P</kbd> ${recebe ? 'recebido' : 'pago'}
-      ${recebe ? '' : '<kbd>E</kbd> estorno'}
-      <kbd>A</kbd> apagar <kbd>Esc</kbd> sai</span>
+      <kbd>Shift+P</kbd> ${recebe ? 'recebido' : 'pago'}
+      ${recebe ? '' : '<kbd>Shift+E</kbd> estorno'}
+      <kbd>Shift+A</kbd> apagar <kbd>Esc</kbd> sai</span>
   </div>`;
 }
 
@@ -1557,6 +1568,7 @@ function alternarModoMarcar() {
   marcarPeloTeclado.digitos = '';
   // Um resultado só: não faz sentido pedir o número dele.
   if (itens.length === 1) {
+    marcarPeloTeclado.buscaNovaNaProxima = true;
     estado.selecao.add(itens[0].id);
     redesenharLista();
     avisar('Marquei o único da lista');
@@ -1575,6 +1587,7 @@ function sairDoModoMarcar() {
 function alternarNumero(n) {
   const id = marcarPeloTeclado.numeroParaId.get(n);
   if (!id) return;
+  marcarPeloTeclado.buscaNovaNaProxima = true;
   marcar(id, !estado.selecao.has(id));
 }
 
@@ -1631,6 +1644,20 @@ function pedirParaApagarSelecionados() {
   setTimeout(() => $('confirmar-apagar')?.focus(), 60);
 }
 
+/**
+ * Pagar e estornar redesenham a tela inteira, e o campo de busca nasce
+ * de novo — sem o cursor. Devolver o cursor é o que deixa o resto do
+ * caminho no teclado: Backspace corrige, letra começa busca nova.
+ */
+function voltarCursorPraBusca() {
+  setTimeout(() => {
+    const campo = [...document.querySelectorAll('.busca input')].find((i) => i.offsetParent !== null);
+    if (!campo) return;
+    campo.focus();
+    campo.setSelectionRange(campo.value.length, campo.value.length);
+  }, 0);
+}
+
 function apagarSelecionadosAgora() {
   const marcados = itensSelecionados();
   for (const x of marcados) {
@@ -1641,6 +1668,7 @@ function apagarSelecionadosAgora() {
   fecharFolha();
   mexeuNosDados();
   desenhar();
+  voltarCursorPraBusca();
   avisar(marcados.length === 1 ? 'Apaguei' : `Apaguei ${marcados.length}`);
 }
 
@@ -1653,23 +1681,42 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'F1' || (ctrl && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'm')) {
     segura(); alternarModoMarcar(); return;
   }
+
+  // Fora do modo, depois de ter marcado: a primeira tecla de texto
+  // zera a busca antes de entrar. Backspace e setas querem corrigir a
+  // busca, não trocar — esses desarmam sem limpar.
+  if (!marcarPeloTeclado.ligado && marcarPeloTeclado.buscaNovaNaProxima && !ctrl && !e.altKey) {
+    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+      marcarPeloTeclado.buscaNovaNaProxima = false;
+    } else if (e.key.length === 1 && e.key !== ' ') {
+      limparBuscaParaANova();       // a tecla segue e entra no campo já vazio
+    }
+    return;
+  }
   if (!marcarPeloTeclado.ligado || ctrl || e.altKey) return;
 
   if (e.key === 'Escape') { segura(); sairDoModoMarcar(); return; }
   if (/^[0-9]$/.test(e.key)) { segura(); digitoNoModo(e.key); return; }
 
+  // As ações pedem Shift. Sem ele, "padaria" digitado logo depois de
+  // marcar pagaria tudo no "p", e "ebanx" estornaria no "e": a palavra
+  // nova começa justamente dentro do modo.
   const k = e.key.toLowerCase();
-  if (k === 'p' || k === 'e' || k === 'a') {
+  if (e.shiftKey && (k === 'p' || k === 'e' || k === 'a')) {
     segura();
     if (!estado.selecao.size) { avisar('Marca algum primeiro'); return; }
     if (k === 'p') marcarTodosComo(estado.tela === 'receitas' ? 'Recebido' : 'Pago');
     else if (k === 'e') estornarSelecionados();
-    else pedirParaApagarSelecionados();
+    else { pedirParaApagarSelecionados(); return; }
+    voltarCursorPraBusca();
     return;
   }
   // Qualquer outra letra: a pessoa voltou a pesquisar. O modo sai e a
-  // tecla segue seu caminho até a busca.
-  if (e.key.length === 1) sairDoModoMarcar();
+  // tecla segue seu caminho até a busca — vazia, se já tinha marcado.
+  if (e.key.length === 1 && e.key !== ' ') {
+    if (marcarPeloTeclado.buscaNovaNaProxima) limparBuscaParaANova();
+    sairDoModoMarcar();
+  }
 }, true);
 
 function linhasDaTela() {
