@@ -873,3 +873,55 @@ body.com-fundo .painel .item{
 .medida{ background:var(--cartao-alto) }
 .medida:hover{ background:var(--cartao-toque) }
 .fundo{ background:var(--cartao-alto) }
+
+/* ===================================================================
+   Lançar vários — a planilha
+   No computador, uma linha por lançamento, igual planilha. No celular
+   não cabem seis colunas, então cada lançamento vira um bloquinho de
+   três linhas: data, nome e valor em cima; forma e categoria no meio;
+   observação embaixo.
+   =================================================================== */
+.folha--larga{width:min(1040px,100%);max-height:92vh}
+.pl-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.pl-teclas{font-size:12px;color:var(--apagado);margin:4px 0 12px;line-height:1.6}
+.pl-teclas b{color:var(--texto);font-weight:600}
+
+.pl-linha,.pl-cabeca{display:grid;gap:6px;align-items:center;
+  grid-template-columns:76px minmax(0,1.6fr) 96px minmax(0,1.3fr) minmax(0,1.1fr) minmax(0,1.3fr) 26px;
+  grid-template-areas:"data nome valor forma categoria obs x"}
+.pl-cabeca{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--apagado);padding:0 2px 6px}
+.pl-linha{padding:3px 0}
+.pl-cel{position:relative;min-width:0}
+.pl-cel--data{grid-area:data} .pl-cel--nome{grid-area:nome} .pl-cel--valor{grid-area:valor}
+.pl-cel--forma{grid-area:forma} .pl-cel--categoria{grid-area:categoria} .pl-cel--obs{grid-area:obs}
+.pl-x{grid-area:x}
+
+.pl-campo{width:100%;min-width:0;box-sizing:border-box;padding:9px 10px;font:inherit;font-size:14px;
+  color:var(--texto);background:var(--cartao-alto);border:1.5px solid transparent;border-radius:10px;outline:none}
+.pl-campo:focus{border-color:var(--menta);background:var(--cartao)}
+select.pl-campo{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:22px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--apagado) 50%),linear-gradient(135deg,var(--apagado) 50%,transparent 50%);
+  background-position:calc(100% - 13px) 55%,calc(100% - 8px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.pl-cel--valor .pl-campo{text-align:right;font-variant-numeric:tabular-nums}
+.pl-aviso{position:absolute;right:6px;bottom:-1px;font-size:10px;font-weight:700;color:var(--ouro);pointer-events:none}
+.pl-x{border:0;background:none;color:var(--apagado);cursor:pointer;font-size:14px;padding:4px;border-radius:8px}
+.pl-x:hover{color:var(--vermelho);background:var(--cartao-alto)}
+.pl-linha--ruim .pl-campo{border-color:color-mix(in srgb,var(--vermelho) 60%,transparent)}
+
+.pl-rodape{position:sticky;bottom:-22px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:14px -18px -22px;padding:12px 18px calc(16px + env(safe-area-inset-bottom));
+  background:var(--cartao);border-top:1px solid var(--linha);font-size:14px;color:var(--apagado)}
+.pl-faltam{color:var(--vermelho)}
+
+/* O cabeçalho e a legenda do teclado são de computador. O estilo deles
+   vem depois do .computador-so e passaria por cima dele, então o
+   esconder precisa ser dito de novo aqui. */
+@media (max-width:899px){ .pl-cabeca,.pl-teclas{display:none} }
+
+@media (max-width:699px){
+  .pl-linha{grid-template-columns:72px minmax(0,1fr) 84px 26px;
+    grid-template-areas:"data nome valor x" "forma forma categoria categoria" "obs obs obs obs";
+    padding:8px;margin-bottom:8px;border-radius:14px;background:color-mix(in srgb,var(--cartao-alto) 45%,transparent)}
+  .pl-campo{background:var(--cartao)}
+}

@@ -36,6 +36,10 @@ import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 import { temVersaoNova, versaoLaFora } from './atualizacao.js';
 import { salvarArquivo } from './arquivos.js';
 import { MODOS, movimentos, extratoCsv, relatorioTexto, nomeDoArquivo } from './exportar.js';
+import {
+  lerValor, lerData, dataCurta, categoriaPeloNome, formaPeloNome, ehCredito,
+  dataDepoisDoFechamento, aplicarFechamento, problemasDaLinha, linhaParaLancamento,
+} from './varios.js';
 
 /** No aparelho mesmo, não no navegador nem no Electron. */
 const noCelular = () => Boolean(window.Capacitor?.isNativePlatform?.());
@@ -840,6 +844,35 @@ function mudarMostrarObs(ligado) {
   avisar(ligado ? 'Agora dá pra ver as observações' : 'Escondi as observações');
 }
 
+/**
+ * O dia em que a fatura fecha, ou 0 se não tiver. Mora na
+ * configuração, que viaja entre aparelhos: é do cartão da pessoa, não
+ * do celular dela.
+ */
+function diaDoFechamento() {
+  const d = Number(D?.config?.diaFechamento) || 0;
+  return d >= 1 && d <= 31 ? d : 0;
+}
+
+function mudarFechamento(bruto) {
+  const n = parseInt(String(bruto).trim(), 10);
+  const dia = Number.isFinite(n) && n >= 1 && n <= 31 ? n : 0;
+  D.config.diaFechamento = dia || '';
+  D.config.atualizadoEm = agora();
+  mexeuNosDados();
+  desenhar();
+  avisar(dia ? `Fatura fecha dia ${dia}` : 'Tirei o dia de fechamento');
+}
+
+/** O aviso de quando a regra mexeu na data. */
+function avisoDoFechamento(quantos, data) {
+  if (!quantos) return '';
+  const mes = MESES[Number(data.slice(5, 7)) - 1].toLowerCase();
+  return quantos === 1
+    ? `A fatura já fechou: lancei em 1º de ${mes}`
+    : `${quantos} foram pra fatura de ${mes}, dia 1º`;
+}
+
 function mudarPlanta(ligada) {
   estado.planta = ligada;
   guardar('cf:planta', ligada);
@@ -1151,12 +1184,339 @@ function alternarForma(f, aparece) {
 function marcarTodasAsFormas() { estado.formasFora.clear(); redesenharLista(); abrirFiltro(); }
 function limparFiltro() { estado.filtro = 'todos'; estado.formasFora.clear(); redesenharLista(); }
 
+/* ===================================================================
+   Lançar vários — uma planilha dentro do app
+
+   O formulário é feito para um lançamento de cada vez, e no fim do
+   dia a pessoa tem oito. Aqui é uma tabela: digita, Enter, próximo
+   campo; Enter no último, próxima linha. Mouse opcional.
+
+   O teclado:
+     Enter / Shift+Enter   próximo / campo anterior
+     ↑ ↓                   numa opção (forma, categoria) troca a opção;
+                           num campo de texto, sobe e desce de linha
+     letra numa opção      pula para a que começa com ela
+     Ctrl+Enter            salva tudo
+     Ctrl+Backspace        apaga a linha
+     Esc                   fecha (o que você digitou fica guardado)
+
+   Nada vira lançamento até "Salvar tudo": dá para revisar antes. E
+   a tabela nunca é redesenhada enquanto se digita — a lição da busca:
+   redesenhar destrói o campo em foco. Só o que mudou é tocado.
+   =================================================================== */
+const COLUNAS = ['data', 'nome', 'valor', 'forma', 'categoria', 'obs'];
+const CHAVE_RASCUNHO = 'cf:rascunhoVarios';
+const varios = { tipo: 'despesas', linhas: [], mostrarErros: false };
+
+const baseDoMes = () => ({ ano: estado.ano, mes: estado.mes + 1 });
+
+function dataPadrao() {
+  const h = hoje();
+  if (h.getFullYear() === estado.ano && h.getMonth() === estado.mes) return dataCurta(paraISO(h));
+  return `01/${String(estado.mes + 1).padStart(2, '0')}`;
+}
+
+const formaMaisUsada = () => formasEmUso().find((f) => f !== SEM_FORMA) || 'Cartão de Crédito';
+
+function linhaNova(anterior) {
+  return {
+    data: anterior?.data || dataPadrao(), nome: '', valor: '',
+    forma: varios.tipo === 'despesas' ? (anterior?.forma || formaMaisUsada()) : '',
+    categoria: '', obs: '', formaManual: false, categoriaManual: false,
+  };
+}
+
+const vazia = (l) => problemasDaLinha(l, baseDoMes()).vazia;
+
+function lerRascunho() {
+  const r = lerGuardado(CHAVE_RASCUNHO, {});
+  return Array.isArray(r[varios.tipo]) ? r[varios.tipo] : [];
+}
+function guardarRascunho() {
+  const r = lerGuardado(CHAVE_RASCUNHO, {});
+  r[varios.tipo] = varios.linhas.filter((l) => !vazia(l));
+  guardar(CHAVE_RASCUNHO, r);
+}
+
+/** Sempre tem uma linha em branco no fim, esperando a próxima. */
+function garantirLinhaVazia() {
+  const ultima = varios.linhas[varios.linhas.length - 1];
+  if (!ultima || !vazia(ultima)) varios.linhas.push(linhaNova(ultima));
+}
+
+function abrirVarios() {
+  varios.tipo = estado.tela === 'receitas' ? 'receitas' : 'despesas';
+  varios.linhas = lerRascunho();
+  varios.mostrarErros = false;
+  garantirLinhaVazia();
+  desenharVarios({ linha: varios.linhas.length - 1, coluna: 'nome' });
+}
+
+function trocarTipoDosVarios(tipo) {
+  if (tipo === varios.tipo) return;
+  guardarRascunho();
+  varios.tipo = tipo;
+  varios.linhas = lerRascunho();
+  garantirLinhaVazia();
+  desenharVarios({ linha: varios.linhas.length - 1, coluna: 'nome' });
+}
+
+function opcoesDe(coluna) {
+  if (coluna === 'forma') {
+    const extras = formasEmUso().filter((f) => f !== SEM_FORMA && !LISTAS.formaPgto.includes(f));
+    return [...LISTAS.formaPgto, ...extras];
+  }
+  return ['', ...(varios.tipo === 'receitas' ? LISTAS.categoriaReceita : LISTAS.categoriaDespesa)];
+}
+
+/** "→ 01/11" ao lado da data, quando o fechamento vai empurrar. */
+function avisoDaLinha(l) {
+  if (varios.tipo !== 'despesas' || vazia(l)) return '';
+  const d = lerData(l.data, baseDoMes());
+  const nova = d && dataDepoisDoFechamento(d, l.forma, diaDoFechamento());
+  return nova ? `→ ${dataCurta(nova)}` : '';
+}
+
+function celulaDosVarios(l, i, c) {
+  const comum = `data-l="${i}" data-c="${c}" onkeydown="teclaNaPlanilha(event)"`;
+  const ehOpcao = c === 'categoria' || (c === 'forma' && varios.tipo === 'despesas');
+  let campo;
+  if (ehOpcao) {
+    campo = `<select class="pl-campo" ${comum} onchange="mudouNaPlanilha(${i}, '${c}', this.value, true)">
+      ${opcoesDe(c).map((o) => `<option value="${escapar(o)}" ${o === l[c] ? 'selected' : ''}>${
+        escapar(o || '—')}</option>`).join('')}
+    </select>`;
+  } else {
+    const modo = c === 'valor' || c === 'data' ? 'decimal' : 'text';
+    const dica = { data: 'dd/mm', nome: 'O que foi', valor: '0,00', forma: 'De quem', obs: 'Observação' }[c] || '';
+    campo = `<input class="pl-campo" ${comum} value="${escapar(l[c])}" inputmode="${modo}"
+      placeholder="${dica}" autocomplete="off" spellcheck="false"
+      oninput="mudouNaPlanilha(${i}, '${c}', this.value)" onblur="saiuDoCampo(${i}, '${c}')">`;
+  }
+  const aviso = c === 'data' ? `<span class="pl-aviso" id="pl-aviso-${i}">${avisoDaLinha(l)}</span>` : '';
+  return `<div class="pl-cel pl-cel--${c}">${campo}${aviso}</div>`;
+}
+
+function linhaDosVarios(l, i) {
+  const p = problemasDaLinha(l, baseDoMes());
+  const ruim = varios.mostrarErros && !p.vazia && p.faltando.length;
+  return `<div class="pl-linha ${ruim ? 'pl-linha--ruim' : ''}" id="pl-linha-${i}">
+    ${COLUNAS.map((c) => celulaDosVarios(l, i, c)).join('')}
+    <button class="pl-x" tabindex="-1" title="Apagar a linha (Ctrl+Backspace)"
+      onclick="apagarLinhaDaPlanilha(${i})">✕</button>
+  </div>`;
+}
+
+function rodapeDosVarios() {
+  const base = baseDoMes();
+  let prontos = 0, soma = 0, faltam = 0;
+  for (const l of varios.linhas) {
+    const p = problemasDaLinha(l, base);
+    if (p.vazia) continue;
+    if (p.faltando.length) { faltam++; continue; }
+    prontos++; soma += lerValor(l.valor);
+  }
+  return `${prontos} ${prontos === 1 ? 'pronto' : 'prontos'} · ${real(soma)}${
+    faltam ? ` · <span class="pl-faltam">${faltam} pela metade</span>` : ''}`;
+}
+
+function desenharVarios(foco) {
+  const despesas = varios.tipo === 'despesas';
+  mostrarFolha(`
+    <div class="pl-topo">
+      <div class="folha__titulo" style="margin:0">Lançar vários</div>
+      <div class="fichas" style="margin:0">
+        <button class="ficha ${despesas ? 'ativa' : ''}" onclick="trocarTipoDosVarios('despesas')">Despesas</button>
+        <button class="ficha ${!despesas ? 'ativa' : ''}" onclick="trocarTipoDosVarios('receitas')">Receitas</button>
+      </div>
+    </div>
+    <p class="pl-teclas computador-so">
+      <b>Enter</b> próximo · <b>Shift+Enter</b> volta · <b>↑↓</b> troca a opção ou a linha ·
+      <b>Ctrl+Enter</b> salva tudo · <b>Esc</b> fecha sem perder nada
+    </p>
+    <div class="pl-cabeca computador-so">
+      <span>Data</span><span>Nome</span><span>Valor</span>
+      <span>${despesas ? 'Forma' : 'Origem'}</span><span>Categoria</span><span>Observação</span><span></span>
+    </div>
+    <div id="pl-linhas">${varios.linhas.map(linhaDosVarios).join('')}</div>
+    <div class="pl-rodape">
+      <span id="pl-conta">${rodapeDosVarios()}</span>
+      <button class="principal" style="width:auto;margin:0;padding:12px 22px" onclick="salvarVarios()">
+        Salvar tudo</button>
+    </div>`, { larga: true });
+  if (foco) setTimeout(() => focarNaPlanilha(foco.linha, foco.coluna), 60);
+}
+
+function focarNaPlanilha(l, c) {
+  const el = document.querySelector(`#folha [data-l="${l}"][data-c="${c}"]`);
+  if (!el) return false;
+  el.focus();
+  // Entrar num campo seleciona o que tem nele: digitar já substitui,
+  // como numa planilha — a data repetida da linha de cima, por exemplo.
+  if (el.tagName === 'INPUT') el.select();
+  return true;
+}
+
+function mudouNaPlanilha(i, c, valor, manual) {
+  const l = varios.linhas[i];
+  if (!l) return;
+  const eraVazia = vazia(l);
+  l[c] = valor;
+  if (manual && c === 'forma') l.formaManual = true;
+  if (manual && c === 'categoria') l.categoriaManual = true;
+
+  // Começou a escrever na última linha? Já nasce a próxima embaixo.
+  if (eraVazia && !vazia(l) && i === varios.linhas.length - 1) {
+    const nova = linhaNova(l);
+    varios.linhas.push(nova);
+    $('pl-linhas')?.insertAdjacentHTML('beforeend', linhaDosVarios(nova, varios.linhas.length - 1));
+  }
+  const aviso = $(`pl-aviso-${i}`);
+  if (aviso) aviso.textContent = avisoDaLinha(l);
+  const conta = $('pl-conta');
+  if (conta) conta.innerHTML = rodapeDosVarios();
+  $(`pl-linha-${i}`)?.classList.remove('pl-linha--ruim');
+  guardarRascunho();
+}
+
+/**
+ * Ao sair do nome, o que dá para adivinhar vem adivinhado: a
+ * categoria e a forma que essa pessoa costuma usar com esse nome.
+ * Só se ela ainda não tiver escolhido na mão.
+ */
+function saiuDoCampo(i, c) {
+  const l = varios.linhas[i];
+  if (!l) return;
+  if (c === 'nome' && l.nome.trim()) {
+    const lista = varios.tipo === 'receitas' ? D.receitas : D.despesas;
+    const trocar = (col, valor) => {
+      if (!valor || l[col] === valor) return;
+      l[col] = valor;
+      const el = document.querySelector(`#folha [data-l="${i}"][data-c="${col}"]`);
+      if (el) el.value = valor;
+    };
+    if (!l.categoriaManual) trocar('categoria', categoriaPeloNome(lista, l.nome));
+    if (!l.formaManual && varios.tipo === 'despesas') trocar('forma', formaPeloNome(lista, l.nome));
+    const aviso = $(`pl-aviso-${i}`);
+    if (aviso) aviso.textContent = avisoDaLinha(l);
+    guardarRascunho();
+  }
+  if (c === 'data') {
+    // "28" vira "28/10" na hora: a pessoa vê que foi entendido.
+    const d = lerData(l.data, baseDoMes());
+    if (d) {
+      l.data = dataCurta(d);
+      const el = document.querySelector(`#folha [data-l="${i}"][data-c="data"]`);
+      if (el) el.value = l.data;
+    }
+  }
+}
+
+function andarNaPlanilha(i, c, passo) {
+  let k = COLUNAS.indexOf(c) + passo;
+  let l = i;
+  if (k >= COLUNAS.length) { l = i + 1; k = COLUNAS.indexOf('nome'); }
+  if (k < 0) { l = i - 1; k = COLUNAS.length - 1; }
+  if (l < 0) return;
+  if (l >= varios.linhas.length) {
+    if (vazia(varios.linhas[i])) return;              // da linha em branco não se cria outra
+    garantirLinhaVazia();
+    $('pl-linhas')?.insertAdjacentHTML('beforeend', linhaDosVarios(varios.linhas[l], l));
+  }
+  focarNaPlanilha(l, COLUNAS[k]);
+}
+
+function teclaNaPlanilha(e) {
+  const el = e.target;
+  const i = Number(el.dataset.l);
+  const c = el.dataset.c;
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (e.key === 'Enter' && ctrl) { e.preventDefault(); saiuDoCampo(i, c); salvarVarios(); return; }
+  if (e.key === 'Enter') { e.preventDefault(); andarNaPlanilha(i, c, e.shiftKey ? -1 : 1); return; }
+  if (e.key === 'Escape') { e.preventDefault(); fecharFolha(); return; }
+  if (ctrl && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); apagarLinhaDaPlanilha(i, c); return; }
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    const passo = e.key === 'ArrowDown' ? 1 : -1;
+    e.preventDefault();
+    if (el.tagName === 'SELECT') {
+      // Feito na mão, e não deixado para o navegador: cada sistema
+      // trata seta num menu fechado de um jeito, e no Mac ela abre a
+      // lista em vez de trocar.
+      const n = el.options.length;
+      el.selectedIndex = (el.selectedIndex + passo + n) % n;
+      mudouNaPlanilha(i, c, el.value, true);
+      return;
+    }
+    if (varios.linhas[i + passo]) focarNaPlanilha(i + passo, c);
+  }
+}
+
+function apagarLinhaDaPlanilha(i, coluna = 'nome') {
+  varios.linhas.splice(i, 1);
+  garantirLinhaVazia();
+  guardarRascunho();
+  desenharVarios({ linha: Math.min(i, varios.linhas.length - 1), coluna });
+}
+
+function salvarVarios() {
+  const base = baseDoMes();
+  const hojeIso = paraISO(hoje());
+  const lista = varios.tipo === 'receitas' ? D.receitas : D.despesas;
+  const criados = [];
+  const sobram = [];
+  let movidos = 0, dataMovida = '';
+
+  for (const l of varios.linhas) {
+    const p = problemasDaLinha(l, base);
+    if (p.vazia) continue;
+    if (p.faltando.length) { sobram.push(l); continue; }
+    const { item, movido } = linhaParaLancamento(l,
+      { tipo: varios.tipo, base, hojeIso, diaFechamento: diaDoFechamento() });
+    item.id = novoId(varios.tipo === 'receitas' ? 'r' : 'd', lista.concat(criados));
+    item.comprovante = '';
+    criados.push(item);
+    if (movido) { movidos++; dataMovida = item.data; }
+  }
+
+  if (!criados.length) {
+    varios.mostrarErros = true;
+    desenharVarios();
+    avisar(sobram.length ? 'Falta nome, valor ou data nas linhas marcadas' : 'Nada pra salvar ainda');
+    return;
+  }
+
+  lista.push(...criados);
+  mexeuNosDados(...criados);
+  const soma = criados.reduce((t, x) => t + x.valor, 0);
+  let recado = `Lancei ${criados.length} · ${real(soma)}`;
+  if (movidos) {
+    const mes = MESES[Number(dataMovida.slice(5, 7)) - 1].toLowerCase();
+    recado += ` — ${movidos} ${movidos === 1 ? 'foi' : 'foram'} pra fatura de ${mes}`;
+  }
+
+  varios.linhas = sobram;
+  varios.mostrarErros = sobram.length > 0;
+  guardarRascunho();
+  desenhar();
+  if (sobram.length) {
+    garantirLinhaVazia();
+    desenharVarios({ linha: 0, coluna: 'nome' });
+    avisar(`${recado}. ${sobram.length} ${sobram.length === 1 ? 'ficou' : 'ficaram'} pra arrumar`);
+  } else {
+    fecharFolha();
+    avisar(recado);
+  }
+}
+
 function linhasDaTela() {
   if (estado.tela === 'devedores') return linhasDeDevedores();
   const recebe = estado.tela === 'receitas';
   const itens = listaDoMes(estado.tela);
   return `
     <div class="fichas">
+      <button class="ficha" onclick="abrirVarios()">${icone('quadro',15)} Lançar vários</button>
       <button class="ficha" onclick="abrirParcelar()">${icone('parcela',15)} Parcelar</button>
       ${fichaDeCopiar()}
       <button class="ficha ${filtrosAtivos().length ? 'ativa' : ''}" onclick="abrirFiltro()">
@@ -1697,6 +2057,7 @@ const SECOES_AJUSTES = {
   aparencia: { nome: 'Aparência',       icone: 'sol',        cor: 'ouro' },
   lembrete:  { nome: 'Lembrete',        icone: 'sino',       cor: 'verde' },
   planta:    { nome: 'A plantinha',     icone: 'planta',     cor: 'verde' },
+  cartao:    { nome: 'Cartão de crédito', icone: 'cartao',   cor: 'ouro' },
   banco:     { nome: 'Seu banco',       icone: 'cartao',     cor: 'menta' },
   backup:    { nome: 'Backup',          icone: 'clipe',      cor: 'ouro' },
   conferir:  { nome: 'Conferir com o banco', icone: 'check',  cor: 'verde' },
@@ -1714,6 +2075,7 @@ function resumoDaSecao(chave) {
     planta: estado.planta
       ? `${sequencia().dias} dias seguidos · ${escudosDisponiveis(D)} de ${MAX_ESCUDOS} escudos`
       : 'Desligada',
+    cartao: diaDoFechamento() ? `Fecha dia ${diaDoFechamento()}` : 'Sem dia de fechamento',
     banco: c && c.ligado ? 'Ligado' : 'Só neste aparelho',
     backup: 'Guardar ou trazer de volta',
     conferir: 'Exportar pra comparar com o extrato',
@@ -2042,6 +2404,22 @@ function secaoDeAjuste(chave) {
       </p>`,
 
     conferir: () => telaDeConferir(),
+
+    cartao: () => `
+      <div class="campo">
+        <div class="campo__nome">Minha fatura fecha no dia</div>
+        <input id="campo-fechamento" inputmode="numeric" maxlength="2" placeholder="ex.: 28"
+               value="${diaDoFechamento() || ''}" onchange="mudarFechamento(this.value)">
+      </div>
+      <p class="explica">
+        Com isso preenchido, o que você lançar <b>no crédito</b> desse dia em diante
+        vai sozinho pro <b>dia 1º do mês seguinte</b> — que é a fatura em que ele vai
+        cair. O dia de verdade fica guardado na observação.
+      </p>
+      <p class="explica explica--fraco">
+        Vale pra lançamento novo, parcela e o lançar vários. O que já está lançado
+        não muda. Deixa em branco pra desligar.
+      </p>`,
 
     sobre: () => `
       <div class="cartao" style="cursor:default">
@@ -2512,14 +2890,19 @@ function gravarNovo() {
     fixa: pegarEscolha('novo-fixa'),
     observacao: pegar('novo-obs'),
   };
+  let movido = false;
   if (recebe) { item.origem = pegar('novo-origem'); D.receitas.push(item); }
-  else { item.formaPgto = pegar('novo-forma'); D.despesas.push(item); }
+  else {
+    item.formaPgto = pegar('novo-forma');
+    movido = aplicarFechamento(item, diaDoFechamento());
+    D.despesas.push(item);
+  }
   const [a, m] = item.data.split('-').map(Number);
   estado.ano = a; estado.mes = m - 1;
   fecharFolha();
   mexeuNosDados(item);
   desenhar();
-  avisar(recebe ? 'Anotei essa entrada' : 'Anotei esse gasto');
+  avisar(movido ? avisoDoFechamento(1, item.data) : (recebe ? 'Anotei essa entrada' : 'Anotei esse gasto'));
 }
 
 function abrirNovoDevedor() {
@@ -2782,7 +3165,12 @@ function gravarParcelas() {
   const quantas = Math.max(1, Math.min(60, Number(pegar('par-qtd')) || 1));
   const valor = pegarValor('par-valor');
   const desc = pegar('par-desc') || 'Parcela';
-  const inicio = new Date(pegar('par-data') + 'T00:00:00');
+  // Comprou parcelado depois do fechamento? A primeira parcela já cai
+  // na fatura seguinte, e todas andam um mês junto com ela.
+  const dataInicial = pegar('par-data');
+  const formaParcela = paraReceitas ? '' : pegar('par-forma');
+  const empurrada = dataDepoisDoFechamento(dataInicial, formaParcela, diaDoFechamento());
+  const inicio = new Date((empurrada || dataInicial) + 'T00:00:00');
   const criadas = [];
   for (let i = 0; i < quantas; i++) {
     // `proximoMes` em vez de somar no mês na mão: somar deixa o dia
@@ -2793,14 +3181,19 @@ function gravarParcelas() {
       id: novoId(paraReceitas ? 'r' : 'd', paraReceitas ? D.receitas : D.despesas),
       data: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
       valor, descricao: `${desc} (${i+1}/${quantas})`, status: 'Pendente',
-      categoria: pegar('par-cat'), fixa: 'Não', observacao: pegar('par-obs'),
+      categoria: pegar('par-cat'), fixa: 'Não',
+      observacao: empurrada
+        ? [pegar('par-obs'), `comprado em ${dataCurta(dataInicial)}`].filter(Boolean).join(' · ')
+        : pegar('par-obs'),
     };
     if (paraReceitas) D.receitas.push(item);
     else { item.formaPgto = pegar('par-forma'); D.despesas.push(item); }
     criadas.push(item);
   }
   fecharFolha(); mexeuNosDados(...criadas); desenhar();
-  avisar(`Pronto, lancei as ${quantas} parcelas`);
+  avisar(empurrada
+    ? `As ${quantas} parcelas começam na fatura de ${MESES[Number(empurrada.slice(5, 7)) - 1].toLowerCase()}`
+    : `Pronto, lancei as ${quantas} parcelas`);
 }
 
 /**
@@ -4025,8 +4418,9 @@ function amostraDeFundo(chave) {
 }
 
 /* ---------------- folha e avisos ---------------- */
-function mostrarFolha(html) {
+function mostrarFolha(html, { larga = false } = {}) {
   if (!$('folha').classList.contains('aberta')) history.pushState({ dentro: true }, '');
+  $('folha').classList.toggle('folha--larga', larga);
   $('folha').innerHTML = `<div class="folha__puxador"></div>` + html;
   $('cortina').classList.add('aberta');
   $('folha').classList.add('aberta');
@@ -4123,7 +4517,9 @@ Object.assign(window, {
   abrirEspelharBanco, espelharBancoAgora, abrirMandarNoBanco, mandarNoBancoAgora,
   porDataNoCampo, abrirMeta, salvarMeta, virarEstorno,
   abrirFiltro, escolherSituacao, alternarForma, marcarTodasAsFormas, limparFiltro,
-  mudarExportar, baixarExtrato, baixarRelatorio,
+  mudarExportar, baixarExtrato, baixarRelatorio, mudarFechamento,
+  abrirVarios, trocarTipoDosVarios, mudouNaPlanilha, saiuDoCampo, teclaNaPlanilha,
+  apagarLinhaDaPlanilha, salvarVarios,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
