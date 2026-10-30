@@ -261,6 +261,7 @@ function ir(tela, doVoltar) {
   estado.tela = tela;
   estado.escolhido = null;
   estado.busca = '';
+  marcarPeloTeclado.ligado = false;
   if (tela !== estado.telaDaForma) estado.formasFora.clear();
   estado.selecao.clear();
   if (tela !== 'ajustes') estado.ajuste = null;
@@ -1511,6 +1512,166 @@ function salvarVarios() {
   }
 }
 
+/* ===================================================================
+   Marcar pelo teclado
+
+   Ideia do Thiago: pesquisar, e marcar os resultados sem mouse. F1
+   ou Ctrl+M liga o modo; cada lançamento da lista ganha um número;
+   digitar o número marca ou desmarca. Com algo marcado, P paga, E
+   estorna, A apaga (pedindo confirmação). Esc sai.
+
+   Mais de nove na lista pede dois algarismos. Para não obrigar a
+   esperar sempre, o número vale na hora quando não tem como ser
+   outro: com 15 na lista, "3" marca o 3 na hora (não existe 30), e
+   "1" espera um instante para ver se vem "12".
+
+   O ouvinte fica na fase de captura do documento. É o que deixa a
+   tecla ser interceptada antes de chegar no campo de busca — senão o
+   "3" iria parar escrito lá.
+   =================================================================== */
+const marcarPeloTeclado = {
+  ligado: false, digitos: '', relogio: null,
+  numeroParaId: new Map(), idParaNumero: new Map(),
+};
+const ESPERA_DOIS_DIGITOS = 450;
+
+function faixaDoModoMarcar(itens, recebe) {
+  marcarPeloTeclado.numeroParaId = new Map(itens.map((x, i) => [i + 1, x.id]));
+  marcarPeloTeclado.idParaNumero = new Map(itens.map((x, i) => [x.id, i + 1]));
+  if (!marcarPeloTeclado.ligado) return '';
+  return `<div class="modo-marcar">
+    <span><b>Modo marcar</b> · digita o número
+      <span id="modo-marcar-digitos" class="modo-marcar__digitos">${marcarPeloTeclado.digitos}</span></span>
+    <span class="modo-marcar__teclas">
+      <kbd>P</kbd> ${recebe ? 'recebido' : 'pago'}
+      ${recebe ? '' : '<kbd>E</kbd> estorno'}
+      <kbd>A</kbd> apagar <kbd>Esc</kbd> sai</span>
+  </div>`;
+}
+
+function alternarModoMarcar() {
+  if (marcarPeloTeclado.ligado) { sairDoModoMarcar(); return; }
+  const itens = listaDoMes(estado.tela);
+  if (!itens.length) { avisar('Nada na lista pra marcar'); return; }
+  marcarPeloTeclado.ligado = true;
+  marcarPeloTeclado.digitos = '';
+  // Um resultado só: não faz sentido pedir o número dele.
+  if (itens.length === 1) {
+    estado.selecao.add(itens[0].id);
+    redesenharLista();
+    avisar('Marquei o único da lista');
+    return;
+  }
+  redesenharLista();
+}
+
+function sairDoModoMarcar() {
+  clearTimeout(marcarPeloTeclado.relogio);
+  marcarPeloTeclado.ligado = false;
+  marcarPeloTeclado.digitos = '';
+  redesenharLista();
+}
+
+function alternarNumero(n) {
+  const id = marcarPeloTeclado.numeroParaId.get(n);
+  if (!id) return;
+  marcar(id, !estado.selecao.has(id));
+}
+
+function digitoNoModo(d) {
+  clearTimeout(marcarPeloTeclado.relogio);
+  marcarPeloTeclado.digitos += d;
+  const total = marcarPeloTeclado.numeroParaId.size;
+  const n = Number(marcarPeloTeclado.digitos);
+  const existe = n >= 1 && n <= total;
+  const podeCrescer = n * 10 <= total && marcarPeloTeclado.digitos.length < 3;
+  const mostrar = () => { const el = $('modo-marcar-digitos'); if (el) el.textContent = marcarPeloTeclado.digitos; };
+
+  if (!existe && !podeCrescer) {
+    avisar(`Não tem o ${marcarPeloTeclado.digitos} na lista`);
+    marcarPeloTeclado.digitos = '';
+    mostrar();
+    return;
+  }
+  if (existe && !podeCrescer) {
+    marcarPeloTeclado.digitos = '';
+    alternarNumero(n);
+    return;
+  }
+  mostrar();
+  marcarPeloTeclado.relogio = setTimeout(() => {
+    marcarPeloTeclado.digitos = '';
+    if (existe) alternarNumero(n); else mostrar();
+  }, ESPERA_DOIS_DIGITOS);
+}
+
+function estornarSelecionados() {
+  const marcados = itensSelecionados().filter((x) => D.despesas.includes(x));
+  if (!marcados.length) { avisar('Estorno é só pra despesa'); return; }
+  for (const x of marcados) x.status = ESTORNADO;
+  estado.selecao.clear();
+  mexeuNosDados(...marcados);
+  desenhar();
+  avisar(marcados.length === 1 ? 'Estornei um' : `Estornei ${marcados.length}`);
+}
+
+function pedirParaApagarSelecionados() {
+  const marcados = itensSelecionados();
+  const soma = marcados.reduce((t, x) => t + (Number(x.valor) || 0), 0);
+  mostrarFolha(`
+    <div class="folha__titulo">Apagar ${marcados.length === 1 ? 'esse lançamento' : `esses ${marcados.length}`}?</div>
+    <p class="explica">Somam <b>${real(soma)}</b>. Não tem desfazer.</p>
+    <button class="principal" id="confirmar-apagar" onclick="apagarSelecionadosAgora()">
+      Apagar ${marcados.length === 1 ? '' : marcados.length}</button>
+    <div class="rodape-form">
+      <button class="secundario" onclick="fecharFolha()">Deixa pra lá</button>
+    </div>`);
+  // O foco no botão faz "A" e depois Enter apagarem — duas teclas
+  // de propósito, uma para pedir e outra para confirmar.
+  setTimeout(() => $('confirmar-apagar')?.focus(), 60);
+}
+
+function apagarSelecionadosAgora() {
+  const marcados = itensSelecionados();
+  for (const x of marcados) {
+    if (D.receitas.includes(x)) apagarDaLista(D.receitas, 'receitas', x.id);
+    else if (D.despesas.includes(x)) apagarDaLista(D.despesas, 'despesas', x.id);
+  }
+  estado.selecao.clear();
+  fecharFolha();
+  mexeuNosDados();
+  desenhar();
+  avisar(marcados.length === 1 ? 'Apaguei' : `Apaguei ${marcados.length}`);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!['receitas', 'despesas'].includes(estado.tela)) return;
+  if ($('folha').classList.contains('aberta')) return;
+  const segura = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (e.key === 'F1' || (ctrl && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'm')) {
+    segura(); alternarModoMarcar(); return;
+  }
+  if (!marcarPeloTeclado.ligado || ctrl || e.altKey) return;
+
+  if (e.key === 'Escape') { segura(); sairDoModoMarcar(); return; }
+  if (/^[0-9]$/.test(e.key)) { segura(); digitoNoModo(e.key); return; }
+
+  const k = e.key.toLowerCase();
+  if (k === 'p' || k === 'e' || k === 'a') {
+    segura();
+    if (!estado.selecao.size) { avisar('Marca algum primeiro'); return; }
+    if (k === 'p') marcarTodosComo(estado.tela === 'receitas' ? 'Recebido' : 'Pago');
+    else if (k === 'e') estornarSelecionados();
+    else pedirParaApagarSelecionados();
+    return;
+  }
+  // Qualquer outra letra: a pessoa voltou a pesquisar. O modo sai e a
+  // tecla segue seu caminho até a busca.
+  if (e.key.length === 1) sairDoModoMarcar();
+}, true);
+
 function linhasDaTela() {
   if (estado.tela === 'devedores') return linhasDeDevedores();
   const recebe = estado.tela === 'receitas';
@@ -1524,6 +1685,7 @@ function linhasDaTela() {
         ${icone('filtro',15)} Filtrar${filtrosAtivos().length ? ` · ${filtrosAtivos().length}` : ''}</button>
     </div>
     ${resumoDoFiltro(itens)}
+    ${faixaDoModoMarcar(itens, recebe)}
     ${barraDeSelecao(recebe)}
     ${itens.length ? agruparPorDia(itens, (x) => linhaLancamento(x, recebe))
       : vazioOuNadaAchado()}`;
@@ -1591,8 +1753,10 @@ function linhaLancamento(x, recebe) {
   const s = texto(x.status);
   const bom = recebe ? s === 'recebido' : s === 'pago';
   const marcado = estado.selecao.has(x.id);
+  const numero = marcarPeloTeclado.ligado ? marcarPeloTeclado.idParaNumero.get(x.id) : null;
   return `<div class="item item--recuado ${estado.escolhido===x.id?'escolhido':''} ${marcado?'item--marcado':''} ${estornado(x)?'item--estornado':''}"
        onclick="abrir('${x.id}')">
+    ${numero ? `<span class="numero-marcar ${marcado ? 'numero-marcar--sim' : ''}">${numero}</span>` : ''}
     <label class="marcar" onclick="event.stopPropagation()" title="Marcar esse">
       <input type="checkbox" ${marcado?'checked':''} onchange="marcar('${x.id}', this.checked)">
     </label>
@@ -4532,7 +4696,7 @@ Object.assign(window, {
   abrirFiltro, escolherSituacao, alternarForma, marcarTodasAsFormas, limparFiltro,
   mudarExportar, baixarExtrato, baixarRelatorio, mudarFechamento,
   abrirVarios, trocarTipoDosVarios, mudouNaPlanilha, saiuDoCampo, teclaNaPlanilha,
-  apagarLinhaDaPlanilha, salvarVarios, mascararCampo,
+  apagarLinhaDaPlanilha, salvarVarios, mascararCampo, apagarSelecionadosAgora,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
