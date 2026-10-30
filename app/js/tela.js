@@ -1291,7 +1291,8 @@ function celulaDosVarios(l, i, c) {
     const dica = { data: 'dd/mm', nome: 'O que foi', valor: '0,00', forma: 'De quem', obs: 'Observação' }[c] || '';
     campo = `<input class="pl-campo" ${comum} value="${escapar(l[c])}" inputmode="${modo}"
       placeholder="${dica}" autocomplete="off" spellcheck="false"
-      oninput="mudouNaPlanilha(${i}, '${c}', this.value)" onblur="saiuDoCampo(${i}, '${c}')">`;
+      oninput="${c === 'valor' ? 'mascararCampo(this); ' : ''}mudouNaPlanilha(${i}, '${c}', this.value)"
+      onblur="saiuDoCampo(${i}, '${c}')">`;
   }
   const aviso = c === 'data' ? `<span class="pl-aviso" id="pl-aviso-${i}">${avisoDaLinha(l)}</span>` : '';
   return `<div class="pl-cel pl-cel--${c}">${campo}${aviso}</div>`;
@@ -3207,17 +3208,29 @@ function gravarParcelas() {
  * responder. Campo de verdade resolve, dá para clicar, usar Tab e
  * digitar como em qualquer outro.
  */
+/**
+ * A conta da máscara, separada de quem a usa: o formulário e a
+ * planilha do "lançar vários" enchem o valor do mesmo jeito, e por
+ * isso a regra mora num lugar só. Sem algarismo nenhum devolve vazio,
+ * e não "0,00" — campo vazio é campo que ninguém preencheu ainda.
+ */
+function valorPelosCentavos(bruto) {
+  const digitos = String(bruto ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(-12);
+  if (!digitos) return '';
+  return (parseInt(digitos, 10) / 100)
+    .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Aplica a máscara num campo e deixa o cursor no fim, onde ela escreve. */
+function mascararCampo(input) {
+  input.value = valorPelosCentavos(input.value);
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
 function ligarMascaraValor(input) {
   if (!input || input.dataset.mascara) return;
   input.dataset.mascara = 'sim';
-  const aplicar = () => {
-    const digitos = input.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(-12);
-    const centavos = digitos ? parseInt(digitos, 10) : 0;
-    input.value = digitos
-      ? (centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      : '';
-    input.setSelectionRange(input.value.length, input.value.length);
-  };
+  const aplicar = () => mascararCampo(input);
   input.addEventListener('input', aplicar);
   input.addEventListener('focus', () => {
     // Ao focar, o cursor vai para o fim: é ali que a máscara escreve.
@@ -4519,7 +4532,7 @@ Object.assign(window, {
   abrirFiltro, escolherSituacao, alternarForma, marcarTodasAsFormas, limparFiltro,
   mudarExportar, baixarExtrato, baixarRelatorio, mudarFechamento,
   abrirVarios, trocarTipoDosVarios, mudouNaPlanilha, saiuDoCampo, teclaNaPlanilha,
-  apagarLinhaDaPlanilha, salvarVarios,
+  apagarLinhaDaPlanilha, salvarVarios, mascararCampo,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
   baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
