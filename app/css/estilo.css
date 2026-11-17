@@ -1,5 +1,6 @@
 :root {
   --fundo:#F7F6F3; --cartao:#FFFFFF; --cartao-alto:#EFEDE7; --cartao-toque:#E4E1D9; --linha:#D9D6CE;
+  --cortina:rgba(28,24,16,.42);
   --texto:#1B1A16; --apagado:#615E56;
 
   --menta:#F5C518; --sobre-menta:#161200;
@@ -39,6 +40,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
   --fundo:#0E0D0A; --cartao:#1C1B17; --cartao-alto:#262420; --cartao-toque:#2F2D27; --linha:#332F29;
+  --cortina:rgba(0,0,0,.6);
   --texto:#EAE7E0; --apagado:#9C978C;
 
   --menta:#FFD34E; --sobre-menta:#231A00;
@@ -61,6 +63,7 @@
 /* Escolha explícita da pessoa, feita no botão da tela inicial. */
 :root[data-tema="escuro"] {
   --fundo:#0E0D0A; --cartao:#1C1B17; --cartao-alto:#262420; --cartao-toque:#2F2D27; --linha:#332F29;
+  --cortina:rgba(0,0,0,.6);
   --texto:#EAE7E0; --apagado:#9C978C;
 
   --menta:#FFD34E; --sobre-menta:#231A00;
@@ -514,6 +517,17 @@ body.com-fundo .entrada{
 body.com-fundo .entrada{
   background:color-mix(in srgb, var(--fundo) var(--opacidade-modal, 100%), transparent);
 }
+/* No claro, a folha é sólida. Ela fica por cima da cortina escura, e
+   branco translúcido sobre preto não é vidro: é cinza. No escuro o
+   vidro continua, porque ali é escuro sobre escuro. */
+:root[data-tema="claro"] body.com-fundo .folha{
+  background:var(--cartao); backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-tema="escuro"]) body.com-fundo .folha{
+    background:var(--cartao); backdrop-filter:none; -webkit-backdrop-filter:none;
+  }
+}
 /* O que está dentro do modal fica sólido: transparência sobre
    transparência vira sopa. */
 body.com-fundo .folha .cartao,
@@ -698,7 +712,7 @@ body.com-fundo .folha .conta{
 .flutuante:hover{filter:brightness(1.06)} .flutuante:active{transform:scale(.98)}
 
 /* ---------- folha ---------- */
-.cortina{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity 200ms var(--sai)}
+.cortina{position:fixed;inset:0;z-index:40;background:var(--cortina);opacity:0;pointer-events:none;transition:opacity 200ms var(--sai)}
 .cortina.aberta{opacity:1;pointer-events:auto;transition:opacity 300ms var(--entra)}
 .folha{position:fixed;z-index:50;left:50%;bottom:0;width:min(560px,100%);background:var(--cartao);
   border-radius:26px 26px 0 0;padding:8px 18px calc(22px + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto;
@@ -706,6 +720,25 @@ body.com-fundo .folha .conta{
 .folha.aberta{transform:translate(-50%,0);transition:transform 450ms var(--entra)}
 .folha__puxador{width:34px;height:4px;border-radius:2px;margin:8px auto 14px;background:var(--linha)}
 .folha__titulo{font-size:19px;font-weight:700;margin-bottom:14px}
+
+/* A revisão da fatura: um placar, e os grupos do que fazer. */
+.conf-placar{display:flex;align-items:baseline;justify-content:center;gap:8px;padding:6px 0 2px}
+.conf-placar__numero{font-family:var(--fonte-destaque);font-size:34px;font-weight:700;letter-spacing:-0.02em}
+.conf-placar__rotulo{color:var(--apagado);font-size:15px}
+.conf-grupo{margin-top:22px}
+.conf-linha{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:baseline;
+  padding:9px 0;border-bottom:1px solid var(--linha);font-size:14px}
+.conf-linha__data{color:var(--apagado);font-size:12.5px}
+.conf-linha__nome{min-width:0;overflow-wrap:anywhere}
+.conf-linha__palpite{display:block;color:var(--apagado);font-size:12.5px;margin-top:2px}
+.conf-linha__valor{font-variant-numeric:tabular-nums;white-space:nowrap}
+.conf-dif{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--linha);font-size:14px}
+.conf-dif__texto{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.4}
+.conf-dif .secundario{flex:none;padding:8px 14px}
+.conf-botao{width:100%;margin-top:12px}
+.conf-explicados{margin-top:22px}
+.conf-explicados summary{cursor:pointer;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--apagado)}
+.conf-explicados .explica{margin:8px 0}
 .valorao{text-align:center;padding:6px 0 4px}
 .valorao__moeda{font-size:17px;color:var(--apagado);vertical-align:super;margin-right:4px}
 .valorao__numero{font-size:40px;font-weight:700;letter-spacing:-0.03em;

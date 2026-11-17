@@ -36,9 +36,10 @@ import { guardarMidia, lerMidia, apagarMidia, emTamanho } from './midia.js';
 import { temVersaoNova, versaoLaFora } from './atualizacao.js';
 import { salvarArquivo } from './arquivos.js';
 import { MODOS, movimentos, extratoCsv, relatorioTexto, nomeDoArquivo } from './exportar.js';
+import { lerArquivoDoBanco, conferirFatura, aprenderNomes } from './importar.js';
 import {
   lerValor, lerData, dataCurta, categoriaPeloNome, formaPeloNome, ehCredito,
-  dataDepoisDoFechamento, aplicarFechamento, problemasDaLinha, linhaParaLancamento,
+  dataDepoisDoFechamento, aplicarFechamento, notaDaCompra, problemasDaLinha, linhaParaLancamento,
 } from './varios.js';
 
 /** No aparelho mesmo, não no navegador nem no Electron. */
@@ -1273,7 +1274,7 @@ function opcoesDe(coluna) {
 
 /** "→ 01/11" ao lado da data, quando o fechamento vai empurrar. */
 function avisoDaLinha(l) {
-  if (varios.tipo !== 'despesas' || vazia(l)) return '';
+  if (varios.tipo !== 'despesas' || vazia(l) || l.daFatura) return '';
   const d = lerData(l.data, baseDoMes());
   const nova = d && dataDepoisDoFechamento(d, l.forma, diaDoFechamento());
   return nova ? `→ ${dataCurta(nova)}` : '';
@@ -1469,6 +1470,7 @@ function salvarVarios() {
   const lista = varios.tipo === 'receitas' ? D.receitas : D.despesas;
   const criados = [];
   const sobram = [];
+  const aprendidos = [];
   let movidos = 0, dataMovida = '';
 
   for (const l of varios.linhas) {
@@ -1476,7 +1478,8 @@ function salvarVarios() {
     if (p.vazia) continue;
     if (p.faltando.length) { sobram.push(l); continue; }
     const { item, movido } = linhaParaLancamento(l,
-      { tipo: varios.tipo, base, hojeIso, diaFechamento: diaDoFechamento() });
+      { tipo: varios.tipo, base, hojeIso, diaFechamento: l.daFatura ? 0 : diaDoFechamento() });
+    if (l.titulo) aprendidos.push({ titulo: l.titulo, nome: item.descricao, categoria: item.categoria });
     item.id = novoId(varios.tipo === 'receitas' ? 'r' : 'd', lista.concat(criados));
     item.comprovante = '';
     criados.push(item);
@@ -1491,6 +1494,8 @@ function salvarVarios() {
   }
 
   lista.push(...criados);
+  const voltaPraRevisao = conferencia.voltar === 'varios' && conferencia.linhas;
+  if (aprendidos.length) aprenderDaConferencia(aprendidos);
   mexeuNosDados(...criados);
   const soma = criados.reduce((t, x) => t + x.valor, 0);
   let recado = `Lancei ${criados.length} · ${real(soma)}`;
@@ -1507,6 +1512,9 @@ function salvarVarios() {
     garantirLinhaVazia();
     desenharVarios({ linha: 0, coluna: 'nome' });
     avisar(`${recado}. ${sobram.length} ${sobram.length === 1 ? 'ficou' : 'ficaram'} pra arrumar`);
+  } else if (voltaPraRevisao) {
+    desenharConferencia();
+    avisar(recado);
   } else {
     fecharFolha();
     avisar(recado);
@@ -2066,7 +2074,14 @@ function telaDeConferir() {
     `<button class="ficha ${ativa ? 'ativa' : ''}" onclick="${acao}">${rotulo}</button>`;
 
   return `
-    <p class="explica" style="margin-top:0">
+    <div class="secao-form__nome">Conferir sozinho</div>
+    <p class="explica" style="margin-top:6px">
+      Anexa o CSV da fatura do Nubank e eu comparo com o app.
+    </p>
+    <button class="principal" onclick="escolherArquivoDoBanco()">Anexar fatura do banco</button>
+
+    <div class="secao-form__nome" style="margin-top:28px">Ou gerar o arquivo do app</div>
+    <p class="explica" style="margin-top:6px">
       Gera um arquivo igual ao que o banco te dá. Dá pra comparar você mesmo, ou
       mandar os dois pra uma IA: o relatório já vai com as instruções pra ela.
     </p>
@@ -2146,6 +2161,207 @@ async function salvarEAvisar(blob, nome, oque) {
   } catch (e) {
     avisar(`Não consegui salvar: ${e?.message || e}`);
   }
+}
+
+/* ===================================================================
+   Conferir sozinho: anexar a fatura do banco
+
+   O outro caminho, ao contrário: o banco manda o arquivo, e o app
+   compara. Quem casa as linhas é o importar.js; aqui é a revisão.
+   Nada muda sem um toque — cada grupo tem o seu botão — e depois de
+   cada toque a conferência é refeita, para a contagem andar junto.
+   =================================================================== */
+const conferencia = { linhas: null, r: null, voltar: null };
+
+function escolherArquivoDoBanco() {
+  const campo = document.createElement('input');
+  campo.type = 'file';
+  // Mesmo motivo do backup: no celular o CSV costuma chegar sem tipo.
+  campo.accept = noCelular() ? '' : '.csv,text/csv';
+  campo.onchange = async () => {
+    const arquivo = campo.files?.[0];
+    if (!arquivo) return;
+    let lido;
+    try { lido = lerArquivoDoBanco(await arquivo.text()); }
+    catch { avisar('Esse arquivo eu não consegui ler'); return; }
+    if (lido.tipo === 'conta') { avisar('Esse é o extrato da conta. Por enquanto eu confiro só a fatura'); return; }
+    if (lido.tipo !== 'fatura') { avisar('Não reconheci esse arquivo. Use o CSV da fatura do Nubank'); return; }
+    if (!lido.linhas.some((l) => l.valor > 0)) { avisar('Essa fatura não tem nenhuma compra'); return; }
+    conferencia.linhas = lido.linhas;
+    desenharConferencia();
+  };
+  campo.click();
+}
+
+function refazerConferencia() {
+  conferencia.r = conferirFatura(D, conferencia.linhas, {
+    diaFechamento: diaDoFechamento(),
+    nomesDoBanco: D.config.nomesDoBanco || {},
+  });
+  return conferencia.r;
+}
+
+const linhaDoBanco = (data, nome, valor, extra = '') => `
+  <div class="conf-linha">
+    <span class="conf-linha__data">${dataCurta(data)}</span>
+    <span class="conf-linha__nome">${escapar(nome)}${extra}</span>
+    <span class="conf-linha__valor">${real(valor)}</span>
+  </div>`;
+
+function desenharConferencia() {
+  const r = refazerConferencia();
+  const mes = MESES[r.mes.mes - 1].toLowerCase();
+  const somar = (lista) => lista.reduce((t, x) => t + Number(x.valor), 0);
+  const totaisBatem = Math.round(r.totalBanco * 100) === Math.round(r.totalApp * 100);
+  const nadaAFazer = !r.aguardando.length && !r.faltam.length && !r.diferencas.length && !r.perguntas.length;
+  const grupo = (titulo, corpo) => `<div class="conf-grupo"><div class="secao-form__nome">${titulo}</div>${corpo}</div>`;
+
+  const aguardando = r.aguardando.length ? grupo(`Já veio no banco · ${r.aguardando.length}`, `
+    <p class="explica explica--fraco">Estão como Aguardando no app.</p>
+    ${r.aguardando.map((x) => linhaDoBanco(x.data, x.descricao, x.valor)).join('')}
+    <button class="secundario conf-botao" onclick="marcarVindosComoPendente()">Marcar como Pendente</button>`) : '';
+
+  const faltam = r.faltam.length ? grupo(`Falta lançar · ${r.faltam.length} · ${real(somar(r.faltam))}`, `
+    ${r.faltam.map((f) => linhaDoBanco(f.banco.data, f.banco.titulo, f.valor,
+      `<span class="conf-linha__palpite">vira “${escapar(f.nome)}”${f.categoria ? ` · ${escapar(f.categoria)}` : ''}</span>`)).join('')}
+    <button class="principal conf-botao" onclick="lancarOsQueFaltam()">Lançar estes</button>`) : '';
+
+  const diferencas = r.diferencas.length ? grupo(`Diferenças · ${r.diferencas.length}`, `
+    ${r.diferencas.map((x, i) => `
+      <div class="conf-dif">
+        <div class="conf-dif__texto"><b>${escapar(x.item.descricao)}</b><br>
+          <span class="explica--fraco">${x.tipo === 'valor'
+            ? `No app ${real(x.item.valor)}, no banco ${real(x.para)}`
+            : `No app está em ${dataCurta(x.item.data)}, mas é desta fatura`}</span>
+        </div>
+        <button class="secundario" onclick="corrigirDiferenca(${i})">Corrigir</button>
+      </div>`).join('')}
+    ${r.diferencas.length > 1 ? `<button class="secundario conf-botao" onclick="corrigirDiferenca('todas')">Corrigir todas</button>` : ''}`) : '';
+
+  const perguntas = r.perguntas.length ? grupo(`Pra você olhar · ${r.perguntas.length}`, r.perguntas.map((p) => p.tipo === 'sobra' ? `
+      <div class="conf-dif">
+        <div class="conf-dif__texto"><b>${escapar(p.item.descricao)}</b> · ${dataCurta(p.item.data)} · ${real(p.item.valor)}<br>
+          <span class="explica--fraco">Está no app, mas não veio na fatura</span>
+        </div>
+        <button class="secundario" onclick="abrirDaConferencia('${p.item.id}')">Abrir</button>
+      </div>` : `
+      <div class="conf-dif">
+        <div class="conf-dif__texto"><b>${escapar(p.banco.titulo)}</b> · ${dataCurta(p.banco.data)} · ${real(-p.banco.valor)}<br>
+          <span class="explica--fraco">O banco devolveu. Se foi estorno, abra o gasto e toque em “Foi estornado”</span>
+        </div>
+      </div>`).join('')) : '';
+
+  const fechamento = r.fechamento ? grupo('Fechamento', `
+    <p class="explica" style="margin-top:4px">
+      Esta fatura começou dia ${dataCurta(r.fechamento.abriu)}. No app, a fatura vira
+      ${diaDoFechamento() ? `no dia ${diaDoFechamento()}` : 'sem dia marcado'}.
+    </p>
+    <button class="secundario conf-botao" onclick="mudarFechamentoDaConferencia(${r.fechamento.dia})">Usar dia ${r.fechamento.dia}</button>`) : '';
+
+  const explicados = r.explicados.length ? `
+    <details class="conf-explicados">
+      <summary>Explicado · ${r.explicados.length}</summary>
+      ${r.explicados.map((e) => `<p class="explica explica--fraco">${escapar(e.texto)}${
+        e.itens?.length && !e.banco ? `: ${e.itens.map((x) => escapar(x.descricao.trim())).join(', ')}` : ''}</p>`).join('')}
+    </details>` : '';
+
+  mostrarFolha(`
+    <div class="folha__titulo">Fatura de ${mes}</div>
+    <div class="conf-placar">
+      <span class="conf-placar__numero">${r.batem} de ${r.quantas}</span>
+      <span class="conf-placar__rotulo">batem</span>
+    </div>
+    <div class="recado ${totaisBatem ? 'recado--bom' : ''}">${totaisBatem
+      ? `Os totais batem: ${real(r.totalBanco)}`
+      : `No banco ${real(r.totalBanco)} · no app ${real(r.totalApp)}`}</div>
+    ${nadaAFazer ? `<p class="explica">Tudo certo com essa fatura.</p>` : ''}
+    ${aguardando}${faltam}${diferencas}${perguntas}${fechamento}${explicados}
+    <div class="rodape-form">
+      <button class="secundario" onclick="fecharFolha()">Fechar</button>
+    </div>`);
+}
+
+/**
+ * Título do banco → nome e categoria, a partir do que já casou. Roda a
+ * cada toque na revisão: é aí que a pessoa disse que concorda.
+ */
+function aprenderDaConferencia(extras = []) {
+  const r = conferencia.r;
+  D.config.nomesDoBanco = D.config.nomesDoBanco || {};
+  const pares = (r?.pares || []).map((p) => ({ titulo: p.banco.titulo, nome: p.item.descricao, categoria: p.item.categoria }));
+  const mudou = aprenderNomes(D.config.nomesDoBanco, [...pares, ...extras]);
+  if (mudou) D.config.atualizadoEm = agora();
+  return mudou > 0;
+}
+
+function depoisDeConferir(recado, ...tocados) {
+  aprenderDaConferencia();
+  mexeuNosDados(...tocados);
+  desenhar();
+  desenharConferencia();
+  avisar(recado);
+}
+
+function marcarVindosComoPendente() {
+  const itens = conferencia.r.aguardando;
+  for (const x of itens) x.status = 'Pendente';
+  depoisDeConferir(itens.length === 1 ? 'Virou Pendente' : `${itens.length} viraram Pendente`, ...itens);
+}
+
+function corrigirDiferenca(qual) {
+  const r = conferencia.r;
+  const lista = qual === 'todas' ? r.diferencas : [r.diferencas[qual]];
+  for (const x of lista) {
+    if (x.tipo === 'valor') x.item.valor = x.para;
+    else {
+      if (x.para !== x.banco.data) x.item.observacao = notaDaCompra(x.item.observacao, x.banco.data);
+      x.item.data = x.para;
+    }
+  }
+  depoisDeConferir(lista.length === 1 ? 'Corrigi' : `Corrigi ${lista.length}`, ...lista.map((x) => x.item));
+}
+
+function mudarFechamentoDaConferencia(dia) {
+  D.config.diaFechamento = dia;
+  D.config.atualizadoEm = agora();
+  depoisDeConferir(`Fatura vira no dia ${dia}`);
+}
+
+function abrirDaConferencia(id) {
+  aprenderDaConferencia();
+  abrir(id);
+  conferencia.voltar = id;
+}
+
+/**
+ * Quem abriu um lançamento pela revisão volta para ela depois de
+ * salvar, apagar ou estornar. Fechar sem fazer nada não volta: a
+ * pessoa desistiu, e a folha some como sempre.
+ */
+function voltaPraConferencia(id) {
+  const volta = conferencia.voltar && conferencia.voltar === id;
+  conferencia.voltar = null;
+  return volta;
+}
+
+/** Os que faltam vão para a planilha do "lançar vários", já preenchidos. */
+function lancarOsQueFaltam() {
+  const r = conferencia.r;
+  aprenderDaConferencia();
+  estado.ano = r.mes.ano;
+  estado.mes = r.mes.mes - 1;
+  varios.tipo = 'despesas';
+  varios.mostrarErros = false;
+  varios.linhas = [...lerRascunho(), ...r.faltam.map((f) => ({
+    data: dataCurta(f.data), nome: f.nome, valor: f.valor.toFixed(2).replace('.', ','),
+    forma: f.forma, categoria: f.categoria, obs: f.obs,
+    formaManual: true, categoriaManual: Boolean(f.categoria),
+    // O banco já disse de que fatura é: a regra do fechamento não mexe.
+    daFatura: true, titulo: f.banco.titulo,
+  }))];
+  garantirLinhaVazia();
+  desenharVarios({ linha: 0, coluna: 'nome' });
+  conferencia.voltar = 'varios';
 }
 
 /**
@@ -2937,11 +3153,13 @@ function virarEstorno(id) {
   const x = achar(id);
   if (!x) return;
   const voltou = estornado(x);
+  const volta = voltaPraConferencia(id);
   x.status = voltou ? 'Pendente' : ESTORNADO;
   fecharFolha();
   estado.escolhido = null;
   mexeuNosDados(x);
   desenhar();
+  if (volta) desenharConferencia();
   avisar(voltou ? 'Voltou a contar' : 'Estornado: não conta mais');
 }
 
@@ -2952,6 +3170,7 @@ function pegarValor(id) { return Number(String(pegar(id)).replace(/\./g,'').repl
 function salvar(pre) {
   const x = achar(estado.escolhido);
   if (!x) return;
+  const volta = voltaPraConferencia(x.id);
   const recebe = D.receitas.includes(x);
   x.data = pegar(pre+'-data');
   x.valor = pegarValor(pre+'-valor');
@@ -2965,6 +3184,7 @@ function salvar(pre) {
   estado.escolhido = null;
   mexeuNosDados(x);
   desenhar();
+  if (volta) desenharConferencia();
   avisar('Pronto, salvei');
 }
 
@@ -3029,6 +3249,7 @@ function excluirDevedor(id) {
 }
 
 function excluir(id) {
+  const volta = voltaPraConferencia(id);
   if (!apagarDaLista(D.receitas, 'receitas', id)) {
     apagarDaLista(D.despesas, 'despesas', id);
   }
@@ -3036,6 +3257,7 @@ function excluir(id) {
   estado.escolhido = null;
   mexeuNosDados();
   desenhar();
+  if (volta) desenharConferencia();
   avisar('Apaguei');
 }
 
@@ -4655,6 +4877,7 @@ function fecharFolha() {
   // continua num campo escondido e, entre outras coisas, digitar
   // deixa de mandar para a busca.
   if ($('folha').contains(document.activeElement)) document.activeElement.blur();
+  conferencia.voltar = null;
   $('cortina').classList.remove('aberta');
   $('folha').classList.remove('aberta');
 }
@@ -4742,6 +4965,8 @@ Object.assign(window, {
   porDataNoCampo, abrirMeta, salvarMeta, virarEstorno,
   abrirFiltro, escolherSituacao, alternarForma, marcarTodasAsFormas, limparFiltro,
   mudarExportar, baixarExtrato, baixarRelatorio, mudarFechamento,
+  escolherArquivoDoBanco, marcarVindosComoPendente, corrigirDiferenca, mudarFechamentoDaConferencia,
+  abrirDaConferencia, lancarOsQueFaltam,
   abrirVarios, trocarTipoDosVarios, mudouNaPlanilha, saiuDoCampo, teclaNaPlanilha,
   apagarLinhaDaPlanilha, salvarVarios, mascararCampo, apagarSelecionadosAgora,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
