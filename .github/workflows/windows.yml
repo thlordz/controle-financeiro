@@ -17,7 +17,7 @@
 #                  Sem ele o .exe sai, mas não se atualiza sozinho.
 # A publicação usa o GITHUB_TOKEN do próprio Actions; não precisa criar.
 # ==================================================================
-name: "Windows e Linux: gerar e publicar"
+name: "Gerar e publicar (Windows, Linux, Android)"
 
 on:
   workflow_dispatch:
@@ -106,8 +106,90 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # O Android. A chave de assinatura NUNCA mora no repositório: ela vem
+  # de dois segredos, e o arquivo só existe durante a geração.
+  #   ANDROID_CHAVE_B64    o controle-financeiro.jks em base64
+  #   ANDROID_CHAVE_SENHA  a senha dele (a mesma para a chave)
+  # Sem os segredos este passo é pulado e o resto publica normalmente.
+  gerar-android:
+    runs-on: ubuntu-latest
+    env:
+      CHAVE_B64: ${{ secrets.ANDROID_CHAVE_B64 }}
+      CHAVE_SENHA: ${{ secrets.ANDROID_CHAVE_SENHA }}
+    steps:
+      - name: Tem chave?
+        id: chave
+        run: |
+          if [ -n "$CHAVE_B64" ] && [ -n "$CHAVE_SENHA" ]; then
+            echo "tem=sim" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Sem ANDROID_CHAVE_B64/ANDROID_CHAVE_SENHA — o APK não foi gerado."
+            echo "tem=nao" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.chave.outputs.tem == 'sim'
+
+      - uses: actions/setup-java@v4
+        if: steps.chave.outputs.tem == 'sim'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-node@v4
+        if: steps.chave.outputs.tem == 'sim'
+        with:
+          node-version: 20
+
+      - name: Carimbar o token de leitura
+        if: steps.chave.outputs.tem == 'sim'
+        env:
+          TOKEN_LEITURA: ${{ secrets.TOKEN_LEITURA }}
+        run: |
+          if [ -n "$TOKEN_LEITURA" ]; then
+            printf '%s' "$TOKEN_LEITURA" | tr -d '[:space:]' > app/token-leitura.txt
+          fi
+
+      # versionCode sai do número da versão: 6.9 → 609, 7.0 → 700.
+      # Sempre cresce junto com a versão e sempre passa do 50 que o
+      # celular já tem — o Android recusa instalar por cima com número menor.
+      - name: Gerar o APK
+        if: steps.chave.outputs.tem == 'sim'
+        working-directory: movel
+        run: |
+          VERSAO="$(sed -n "s/^export const VERSAO = '\([^']*\)'.*/\1/p" ../app/js/versao.js)"
+          MAIOR="${VERSAO%%.*}"; MENOR="${VERSAO#*.}"; MENOR="${MENOR%%.*}"
+          CODIGO=$((MAIOR * 100 + MENOR))
+          sed -i "s/versionCode [0-9]*/versionCode $CODIGO/; s/versionName \"[^\"]*\"/versionName \"$VERSAO\"/" android/app/build.gradle
+          echo "Versão $VERSAO (versionCode $CODIGO)"
+          npm ci
+          npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+
+      - name: Assinar
+        if: steps.chave.outputs.tem == 'sim'
+        working-directory: movel
+        run: |
+          FERRAMENTAS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          CHAVE="$RUNNER_TEMP/chave.jks"
+          printf '%s' "$CHAVE_B64" | base64 -d > "$CHAVE"
+          "$FERRAMENTAS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/alinhado.apk"
+          "$FERRAMENTAS/apksigner" sign --ks "$CHAVE" --ks-pass env:CHAVE_SENHA --key-pass env:CHAVE_SENHA \
+            --out "Controle Financeiro.apk" "$RUNNER_TEMP/alinhado.apk"
+          rm -f "$CHAVE"
+          "$FERRAMENTAS/apksigner" verify "Controle Financeiro.apk"
+
+      - name: Guardar o resultado
+        if: steps.chave.outputs.tem == 'sim'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: movel/Controle Financeiro.apk
+          retention-days: 7
+
   publicar:
-    needs: [gerar, gerar-linux]
+    needs: [gerar, gerar-linux, gerar-android]
+    if: ${{ !cancelled() && needs.gerar.result == 'success' && needs.gerar-linux.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -121,6 +203,12 @@ jobs:
         with:
           name: linux
           path: build
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: android
+          path: movel
 
       - name: Mandar para a Release
         env:
