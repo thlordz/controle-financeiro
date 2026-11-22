@@ -6,8 +6,9 @@
 # release da versão (v + o número de app/js/versao.js), junto com o
 # app.tar.gz que o app já instalado usa para se atualizar sozinho.
 #
-# Como rodar:
-#   - Aba Actions → "Windows: gerar e publicar" → Run workflow; ou
+# Como rodar (o normal é o primeiro):
+#   - mudar o número em app/js/versao.js, commit e Push origin; ou
+#   - Aba Actions → "Gerar e publicar" → Run workflow; ou
 #   - mandar uma tag:  git tag v6.9 && git push origin v6.9
 #
 # Precisa de UM segredo no repositório (Settings → Secrets and
@@ -24,6 +25,12 @@ on:
   push:
     tags:
       - "v*"
+    # Mudou o número da versão e deu push? Gera e publica sozinho.
+    # É o jeito do dia a dia: não precisa criar tag nem clicar em nada.
+    branches:
+      - main
+    paths:
+      - "app/js/versao.js"
 
 permissions:
   contents: write

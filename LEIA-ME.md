@@ -179,11 +179,14 @@ O token de escrita, usado para publicar, fica em
 
 ### Publicando o Windows pelo GitHub (sem Node na máquina)
 
-O arquivo `.github/workflows/windows.yml` gera o instalador num Windows do
-próprio GitHub e o anexa na release da versão, com o `app.tar.gz` da
-atualização. Para rodar: mudar o número em `app/js/versao.js`, fazer o commit
-e mandar a tag (`git tag v6.9` e `git push origin v6.9`), ou ir em Actions →
-"Windows: gerar e publicar" → Run workflow.
+O arquivo `.github/workflows/windows.yml` gera tudo no próprio GitHub — o
+instalador do Windows, o `.deb`, o AppImage e o APK assinado — e anexa na
+release da versão, com o `app.tar.gz` da atualização.
+
+**Para lançar uma versão nova:** mudar o número em `app/js/versao.js`, fazer o
+commit e dar Push origin. Só isso: o push com a versão mudada dispara a geração,
+e em uns 15 minutos a release está no ar. Também dá para rodar na mão em
+Actions → "Gerar e publicar" → Run workflow.
 
 Precisa do segredo `TOKEN_LEITURA` no repositório (Settings → Secrets and
 variables → Actions) com o token de leitura; sem ele o `.exe` não se atualiza
