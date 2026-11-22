@@ -37,7 +37,6 @@ Controle Financeiro/
 │   └── preload.js
 ├── dados/
 │   ├── controle-financeiro.json        Arquivo de trabalho (começa vazio)
-│   └── backup-planilha-2026-09-03.json Conversão da planilha original
 ├── build-assets/              Ícones do aplicativo
 ├── build/                     Saída do empacotamento
 ├── pendrive/                  ← pronto para copiar no pendrive
@@ -163,7 +162,9 @@ fábrica e nunca muda: a atualização do Windows são 148 KB.
 
 ### O token
 
-O repositório é privado, então tudo passa por um token de leitura. Ele **não
+O repositório é **público**: as pessoas baixam pela página de Releases e os
+apps se atualizam sem precisar de token. O token de leitura virou opcional —
+se ele estiver no pacote e vencer, o app refaz o pedido sem ele. Ele **não
 mora no projeto**: fica em `~/.config/controle-financeiro-tokens/leitura.txt` e
 é copiado para `app/token-leitura.txt` só durante o empacotamento, saindo logo
 depois. Assim ele nunca é gravado no histórico do Git, e trocar de token um dia
@@ -250,7 +251,7 @@ O3         = O3 + diferenca          (acumula, não substitui)
 
 Assim o saldo do painel passa a bater exatamente com o valor informado, sem
 que nenhum lançamento seja alterado. O app mostra a diferença ao vivo enquanto
-você digita ("Acrescenta R$ 93,07 de ajuste") e aceita os formatos `3200,50`,
+você digita ("Acrescenta R$ 50,00 de ajuste") e aceita os formatos `3200,50`,
 `3.200,50`, `3200.50` e `R$ 1.234,56`.
 
 No arquivo de dados esse valor é o campo `config.ajusteSaldo`. A tela de
@@ -418,11 +419,11 @@ sai do mês de destino. O `Despesa_CopiarFixasMesAnterior` até tem um tratament
 de erro que calcularia o último dia do mês, mas ele nunca dispara, porque
 `DateSerial` não gera erro nesse caso. O app trava no último dia do mês
 (28/02), que é o que o código original claramente pretendia. Isso afeta os
-lançamentos de dia 29 a 31 — no arquivo atual, o salário recorrente do dia 29.
+lançamentos de dia 29 a 31.
 
 **2. Valores fora da lista de validação.** As listas da planilha mudaram com o
-tempo: as linhas 138–154 e 179–182 de Despesas ainda usam "Fundo Emergência",
-que saiu da lista de formas de pagamento. Quando o valor gravado não está mais
+tempo, e lançamentos antigos podem usar uma forma de pagamento que já saiu da
+lista. Quando o valor gravado não está mais
 na lista, o formulário o adiciona marcado como *(fora da lista)*, em vez de
 mostrar o campo em branco e apagá-lo ao salvar.
 

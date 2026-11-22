@@ -9,10 +9,9 @@
 // Trocar na saída, e não na entrada, é o que evita o susto: ninguém
 // vê o app reiniciar sozinho no meio de um lançamento.
 //
-// O repositório é privado, então tudo passa por um token de leitura
-// que é gravado no pacote na hora da publicação (app/token-leitura.txt).
-// Sem esse arquivo — rodando do código-fonte, por exemplo — a
-// atualização simplesmente não existe, e o app funciona igual.
+// O repositório é público, então nada disso precisa de senha. Se o
+// pacote tiver um token de leitura (app/token-leitura.txt), ele vai
+// junto; se ele vencer, o pedido é refeito sem ele.
 // =========================================================
 
 const fs = require('fs');
@@ -64,10 +63,20 @@ function buscar(url, aceitar, comToken = true) {
       'Accept': aceitar,
       'User-Agent': 'Controle-Financeiro',
     };
-    if (comToken) cabecalhos.Authorization = `Bearer ${token()}`;
+    const chave = comToken ? token() : null;
+    if (chave) cabecalhos.Authorization = `Bearer ${chave}`;
 
     const pedido = https.get(url, { headers: cabecalhos }, (resposta) => {
       const codigo = resposta.statusCode || 0;
+
+      // O repositório é público: o token é só um extra. Se ele venceu
+      // ou foi apagado, o GitHub recusa (401) mesmo o que é público —
+      // então tenta de novo sem ele, em vez de parar de atualizar.
+      if (chave && (codigo === 401 || codigo === 403)) {
+        resposta.resume();
+        aceite(buscar(url, aceitar, false));
+        return;
+      }
 
       if (codigo >= 300 && codigo < 400 && resposta.headers.location) {
         resposta.resume();
@@ -160,7 +169,7 @@ function podeEscrever(pasta) {
  * Nunca lança: uma atualização que falha não pode atrapalhar o app.
  */
 async function procurar(pastaBase) {
-  if (emAndamento || !token()) return null;
+  if (emAndamento) return null;
   emAndamento = true;
   try {
     const release = JSON.parse(

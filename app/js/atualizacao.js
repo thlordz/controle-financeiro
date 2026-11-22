@@ -90,8 +90,14 @@ export async function atualizacaoEsperando() {
 // ------------------------------------------------------------------
 
 async function lerDoGitHub(p, chave, caminho) {
-  const r = await p.baixarTexto({ url: `https://api.github.com${caminho}`, token: chave });
-  return JSON.parse(r.texto);
+  const pedir = async (t) => {
+    const r = await p.baixarTexto({ url: `https://api.github.com${caminho}`, ...(t ? { token: t } : {}) });
+    return JSON.parse(r.texto);
+  };
+  // O repositório é público: sem token também funciona. Com um token
+  // vencido o GitHub recusa até o que é público, então tenta sem ele.
+  if (!chave) return pedir(null);
+  try { return await pedir(chave); } catch { return pedir(null); }
 }
 
 /**
@@ -107,11 +113,19 @@ async function olharNoAndroid(p, agoraMesmo = false) {
   const ultima = Number(localStorage.getItem(CHAVE_ULTIMA_BUSCA) || 0);
   if (!agoraMesmo && agora - ultima < ESPERA_ENTRE_BUSCAS) return null;
 
-  const chave = await token();
-  if (!chave) return null;
+  let chave = await token();
   localStorage.setItem(CHAVE_ULTIMA_BUSCA, String(agora));
 
-  const release = await lerDoGitHub(p, chave, `/repos/${REPO}/releases/latest`);
+  // Confere uma vez se o token ainda serve; se não, segue sem ele —
+  // inclusive no download do APK, mais adiante.
+  let release;
+  try {
+    release = chave
+      ? JSON.parse((await p.baixarTexto({
+          url: `https://api.github.com/repos/${REPO}/releases/latest`, token: chave })).texto)
+      : null;
+  } catch { chave = null; }
+  if (!release) release = await lerDoGitHub(p, null, `/repos/${REPO}/releases/latest`);
   const ficha = (release.assets || []).find((a) => a.name === 'atualizacao.json');
   if (!ficha) return null;
 
@@ -144,7 +158,7 @@ export async function baixarEInstalar() {
 
     await p.baixarApk({
       url: `https://api.github.com/repos/${REPO}/releases/assets/${achado.pacote.anexo}`,
-      token: achado.chave,
+      ...(achado.chave ? { token: achado.chave } : {}),
       soma: achado.pacote.soma,
       versao: achado.versao,
     });
