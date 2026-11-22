@@ -114,6 +114,12 @@ export async function testarConexao(url, token) {
     await cliente.testar();
     return { ok: true };
   } catch (e) {
+    // Na hora de ligar, "não cheguei" quase sempre é endereço errado ou
+    // cortado na cópia, não falta de internet.
+    const m = String(e?.message || e || '');
+    if (/failed to fetch|networkerror|load failed|timeout|ERR_/i.test(m)) {
+      return { ok: false, erro: 'Não consegui chegar nesse endereço. Confere se ele foi colado inteiro (começa com libsql:// ou https://) e se a internet está ligada.' };
+    }
     return { ok: false, erro: emPortugues(e) };
   }
 }

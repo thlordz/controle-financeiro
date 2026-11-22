@@ -3974,16 +3974,24 @@ function mostrarEntrada() {
         <div class="campo__nome">Token</div>
         <input id="con-token" placeholder="cola aqui o token" autocomplete="off">
       </div>
-      <button class="principal" onclick="conectar()">Ligar meu banco</button>
+      <button class="principal" id="con-botao" onclick="conectar()">Ligar meu banco</button>
+      <div class="recado" id="con-recado" hidden></div>
 
       <div class="entrada__ou">ou</div>
+      ${estaLigada() ? `
+      <button class="secundario" style="width:100%" onclick="voltarSemTrocar()">
+        Voltar sem trocar de banco
+      </button>
+      <p class="entrada__conversa" style="margin-top:14px;font-size:13px">
+        O banco que você já tem continua ligado até o novo ser conferido.
+      </p>` : `
       <button class="secundario" style="width:100%" onclick="usarSoNesteAparelho()">
         Deixa pra depois, quero usar só aqui
       </button>
       <p class="entrada__conversa" style="margin-top:14px;font-size:13px">
         Usando só aqui, seus dados ficam neste aparelho. Dá para ligar o banco
         depois, nos ajustes, sem perder nada.
-      </p>
+      </p>`}
     </div>`;
 }
 
@@ -3998,10 +4006,30 @@ function normalizarEndereco(url) {
   return t;
 }
 
+// Não desliga nada ao abrir: o banco atual continua valendo até o novo
+// ser conferido em conferirEligar(). Antes o clique já apagava a
+// conexão, e quem só queria olhar ficava sem sincronia.
 function trocarDeBanco() {
-  limparConfiguracao();
-  guardar('cf:soAqui', false);
   mostrarEntrada();
+}
+
+function voltarSemTrocar() {
+  esconderEntrada();
+  desenhar();
+}
+
+/**
+ * O recado embaixo do botão "Ligar meu banco". Fica na própria tela, e
+ * não num aviso que some em segundo e meio: quem está colando endereço
+ * e token precisa ler com calma o que deu errado.
+ */
+function recadoDaEntrada(texto, tom = '') {
+  const r = $('con-recado');
+  if (!r) return;
+  r.hidden = !texto;
+  r.textContent = texto || '';
+  r.classList.toggle('recado--bom', tom === 'bom');
+  r.classList.toggle('recado--ruim', tom === 'ruim');
 }
 
 function conectar() {
@@ -4009,8 +4037,8 @@ function conectar() {
   if (nome) guardar('cf:nome', nome.slice(0, 24));
   const url = pegar('con-url').trim();
   const token = pegar('con-token').trim();
-  if (!url) { avisar('Falta o endereço do banco'); return; }
-  if (!token) { avisar('Falta o token'); return; }
+  if (!url) { recadoDaEntrada('Falta colar o endereço do banco.', 'ruim'); $('con-url')?.focus(); return; }
+  if (!token) { recadoDaEntrada('Falta colar o token.', 'ruim'); $('con-token')?.focus(); return; }
   conferirEligar(normalizarEndereco(url), token);
 }
 
@@ -4018,17 +4046,99 @@ function conectar() {
  * Antes era só gravar e seguir. Um token errado passava batido e a
  * pessoa só descobria dias depois, quando o outro aparelho não via
  * nada — foi exatamente o tipo de silêncio que quebrou a sincronia.
+ *
+ * E depois de conferir, sincroniza na hora. Antes a pessoa ligava o
+ * banco, caía numa pergunta sobre backup e depois tinha de ir caçar o
+ * "Sincronizar agora" nos Ajustes para ver os lançamentos chegarem.
  */
 async function conferirEligar(url, token) {
-  avisar('Conferindo o banco…');
+  const botao = $('con-botao');
+  if (botao) { botao.disabled = true; botao.textContent = 'Conferindo…'; }
+  recadoDaEntrada('Conferindo o endereço e o token com o Turso…');
+
   const r = await testarConexao(url, token);
   if (!r.ok) {
-    avisar(`Não consegui entrar: ${r.erro}`);
+    if (botao) { botao.disabled = false; botao.textContent = 'Ligar meu banco'; }
+    recadoDaEntrada(r.erro, 'ruim');
     return;
   }
   gravarConfiguracao({ url, token, marca: '', em: '' });
   guardar('cf:soAqui', false);
-  perguntarDoBackup();
+  primeiraSincronia();
+}
+
+const totalDeLancamentos = () =>
+  D.receitas.length + D.despesas.length + D.devedores.length + D.investimento.length;
+
+/**
+ * A primeira sincronia, mostrada passo a passo na tela de entrada.
+ * Ela é uma UNIÃO: traz o que está no banco e manda o que está aqui.
+ * Nada é apagado, de nenhum dos lados — por isso não há pergunta a
+ * fazer antes, só o resultado a mostrar depois.
+ */
+async function primeiraSincronia() {
+  const e = $('entrada');
+  e.hidden = false;
+  e.innerHTML = `
+    <div class="entrada__meio">
+      <div class="entrada__marca">$</div>
+      <div class="entrada__titulo">Banco ligado!</div>
+      <p class="entrada__conversa">
+        Agora estou juntando o que está no banco com o que está aqui.
+        Nada é apagado, nem lá nem aqui.
+      </p>
+      <div class="progresso" style="margin-top:18px"><div class="progresso__cheio" style="width:60%"></div></div>
+      <p class="entrada__conversa" style="margin-top:10px;font-size:13px">Sincronizando…</p>
+    </div>`;
+
+  const antes = totalDeLancamentos();
+  const r = await sincronizarAgora();
+  const depois = totalDeLancamentos();
+
+  if (!r.ok) {
+    e.innerHTML = `
+      <div class="entrada__meio">
+        <div class="entrada__marca">$</div>
+        <div class="entrada__titulo">Banco ligado, mas a sincronia falhou</div>
+        <div class="recado recado--ruim">${escapar(r.recado || 'Não sei dizer o motivo.')}</div>
+        <button class="principal" style="margin-top:16px" onclick="primeiraSincronia()">Tentar de novo</button>
+        <div class="rodape-form" style="margin-top:12px">
+          <button class="secundario" onclick="abrirAppDepoisDeLigar()">Abrir o app mesmo assim</button>
+        </div>
+        <p class="entrada__conversa" style="margin-top:14px;font-size:13px">
+          Abrindo assim, eu tento de novo sozinho daqui a pouco. Dá para
+          acompanhar em Ajustes → Seus dados → Sincronizar aparelhos.
+        </p>
+      </div>`;
+    return;
+  }
+
+  const chegaram = Math.max(0, depois - antes);
+  const resumo = depois === 0
+    ? 'Seu banco está vazio e este aparelho também. É só começar a lançar: o que você puser aqui vai para o banco sozinho.'
+    : chegaram > 0
+      ? `Chegaram ${chegaram} lançamentos do banco. Agora este aparelho tem ${depois} no total.`
+      : `Este aparelho tem ${depois} lançamentos, e o banco agora tem os mesmos.`;
+
+  e.innerHTML = `
+    <div class="entrada__meio">
+      <div class="entrada__marca">$</div>
+      <div class="entrada__titulo">Tudo certo, ${escapar(seuNome())}!</div>
+      <div class="recado recado--bom">${escapar(resumo)}</div>
+      <p class="entrada__conversa" style="margin-top:14px">
+        Daqui para frente eu sincronizo sozinho: ao abrir, ao salvar e de
+        minuto em minuto enquanto o app está na tela.
+      </p>
+      <button class="principal" style="margin-top:8px" onclick="abrirAppDepoisDeLigar()">Abrir o app</button>
+      <div class="entrada__ou">só se precisar</div>
+      <button class="secundario" style="width:100%" onclick="escolherArquivoDeBackup()">
+        Juntar um arquivo de backup
+      </button>
+      <p class="entrada__conversa" style="margin-top:10px;font-size:13px">
+        Para quem usava o app sem banco e guardou um backup. Os lançamentos
+        do arquivo são somados aos que já estão aqui; nada é apagado.
+      </p>
+    </div>`;
 }
 
 function usarSoNesteAparelho() {
@@ -4038,32 +4148,6 @@ function usarSoNesteAparelho() {
   esconderEntrada();
   desenhar();
   avisar('Beleza, fica só aqui então');
-}
-
-/**
- * Logo depois de ligar o banco, a pergunta que evita uma tragédia:
- * quem usava o app só neste aparelho tem um monte de coisa gravada, e
- * ligar um banco vazio por cima apagaria tudo.
- */
-function perguntarDoBackup() {
-  const e = $('entrada');
-  e.innerHTML = `
-    <div class="entrada__meio">
-      <div class="entrada__marca">$</div>
-      <div class="entrada__titulo">Pronto, ${escapar(seuNome())}, banco ligado!</div>
-      <p class="entrada__conversa">
-        Antes de começar: você já usava o app <b>só neste aparelho</b> e tem um
-        backup guardado? Se tiver, me manda que eu junto tudo, e você não perde
-        nada do que já tinha lançado.
-      </p>
-      <button class="principal" onclick="escolherArquivoDeBackup()">Tenho um backup, quero usar</button>
-      <div class="rodape-form" style="margin-top:12px">
-        <button class="secundario" onclick="comecarDoZero()">Começar do zero</button>
-      </div>
-      <p class="entrada__conversa" style="margin-top:16px;font-size:13px">
-        Se você não sabe do que eu estou falando, pode começar do zero tranquilo.
-      </p>
-    </div>`;
 }
 
 function escolherArquivoDeBackup() {
@@ -4090,10 +4174,11 @@ function escolherArquivoDeBackup() {
   campo.click();
 }
 
-function comecarDoZero() {
+// Era "Começar do zero" — e soava como apagar o banco. Não apaga nada:
+// só fecha a tela de entrada e mostra o app.
+function abrirAppDepoisDeLigar() {
   esconderEntrada();
   desenhar();
-  avisar('Beleza, vamos começar!');
 }
 
 /* ===================================================================
@@ -4928,7 +5013,10 @@ function fecharFolha() {
 function avisar(texto) {
   const b = document.createElement('div');
   b.textContent = texto;
-  b.style.cssText = 'position:fixed;left:50%;bottom:92px;transform:translateX(-50%) translateY(20px);z-index:60;' +
+  // z-index acima de tudo, inclusive da tela de entrada (70): antes o
+  // aviso nascia atrás dela, e quem ligava o banco não via "Conferindo…"
+  // nem o erro — clicava e parecia que nada acontecia.
+  b.style.cssText = 'position:fixed;left:50%;bottom:92px;transform:translateX(-50%) translateY(20px);z-index:100;' +
     'background:var(--cartao-alto);color:var(--texto);padding:12px 22px;border-radius:999px;opacity:0;' +
     'transition:opacity 240ms,transform 150ms var(--padrao);box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:14.5px';
   document.body.appendChild(b);
@@ -5014,7 +5102,7 @@ Object.assign(window, {
   apagarLinhaDaPlanilha, salvarVarios, mascararCampo, apagarSelecionadosAgora,
   abrir, abrirDevedor, abrirInvestimento, abrirParcelar, abrirReajuste, apagarRendimento,
   apagarTudoMesmo, apagarTudoPasso1, apagarTudoPasso2, apagarTudoPasso3, avisar, baixarBackup,
-  baixarBackupAntesDeApagar, comecarDoZero, conectar, conferirPalavra, confirmarReajuste, escolher,
+  baixarBackupAntesDeApagar, abrirAppDepoisDeLigar, primeiraSincronia, voltarSemTrocar, conectar, conferirPalavra, confirmarReajuste, escolher,
   escolherArquivoDeBackup, escolherArquivoDeFundo, trocarDeBanco, excluir, excluirDevedor, explicarSaldo, explicarSobra,
   fecharFolha, gravarInvestir, gravarNovo, gravarNovoDevedor, gravarParcelas, ir,
   irNoAjuste, limparSelecao, marcar, marcarTodosComo, mostrarEntrada, mudarBrilho,
