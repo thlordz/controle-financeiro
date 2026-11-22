@@ -85,8 +85,11 @@ fi
 # instalador (Controle-Financeiro-Setup.exe). Ele não entra no
 # manifesto ('nenhuma'): o app já instalado se atualiza só com o
 # app.tar.gz, que tem poucas centenas de KB.
-APPIMAGE_ACHADO="$(ls -1t build/*.AppImage 2>/dev/null | head -1)"
-DEB_ACHADO="$(ls -1t build/*.deb 2>/dev/null | head -1)"
+# O `|| true` é obrigatório: sem AppImage (no GitHub Actions, que só
+# gera o Windows) o `ls` falha, o pipefail passa a falha adiante e o
+# `set -e` encerra o script calado, com código 2.
+APPIMAGE_ACHADO="$(ls -1t build/*.AppImage 2>/dev/null | head -1 || true)"
+DEB_ACHADO="$(ls -1t build/*.deb 2>/dev/null | head -1 || true)"
 
 PACOTES=(
   "linux|${APPIMAGE_ACHADO:-build/nao-existe}|Controle-Financeiro.AppImage"
