@@ -25,6 +25,9 @@ movel/android/local.properties
 # --- O token carimbado na hora de empacotar ---
 app/token-leitura.txt
 
+# --- Os tokens do GitHub guardados nesta máquina ---
+secret/
+
 # --- Pacotes prontos (vão nas Releases, não no repositório) ---
 build/
 entrega/
