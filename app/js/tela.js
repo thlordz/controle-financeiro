@@ -4329,7 +4329,9 @@ function apagarTudoMesmo() {
    =================================================================== */
 const lembrete = { ligado: false, hora: '20:00' };
 
-function seuNome() { return lerGuardado('cf:nome', 'Thiago'); }
+// O app é usado por outras pessoas: ninguém abre pela primeira vez
+// sendo chamado pelo nome de outro.
+function seuNome() { return lerGuardado('cf:nome', 'você'); }
 function mudarNome(novo) {
   const limpo = String(novo || '').trim().slice(0, 24);
   guardar('cf:nome', limpo || 'você');
@@ -4849,24 +4851,24 @@ function previaDoFundo() {
       <span class="pastilha pastilha--menta">${icone('cartao', 17)}</span>
       <span>
         <div class="previa__rotulo">Saldo em conta</div>
-        <div class="previa__valor dinheiro">R$ 200,88</div>
+        <div class="previa__valor dinheiro">R$ 1.250,00</div>
       </span>
     </div>
     <div class="previa__cartao">
       <span class="pastilha pastilha--vermelha">${icone('desce', 17)}</span>
       <span>
         <div class="previa__nome">Mercado</div>
-        <div class="previa__sub">27/09 · Cartão de Crédito</div>
+        <div class="previa__sub">12/03 · Cartão de Crédito</div>
       </span>
-      <span class="previa__dir dinheiro">R$ 45,45</span>
+      <span class="previa__dir dinheiro">R$ 80,00</span>
     </div>
     <div class="previa__cartao">
       <span class="pastilha pastilha--verde">${icone('sobe', 17)}</span>
       <span>
         <div class="previa__nome">Salário</div>
-        <div class="previa__sub">29/09 · Renda fixa</div>
+        <div class="previa__sub">05/03 · Renda fixa</div>
       </span>
-      <span class="previa__dir dinheiro">R$ 794,72</span>
+      <span class="previa__dir dinheiro">R$ 2.000,00</span>
     </div>
     <div class="previa__cartao">
       ${svgDaPlanta(chaveDoEstagio(sequencia().dias)).replace('planta__vaso', 'planta__vaso previa__planta')}
