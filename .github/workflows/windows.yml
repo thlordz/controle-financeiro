@@ -210,7 +210,24 @@ jobs:
           name: android
           path: movel
 
-      - name: Mandar para a Release
+      # Release do repositório privado: é dela que os apps instalados
+      # descobrem a versão nova.
+      - name: Mandar para a Release (privada, atualização)
         env:
           TOKEN_PUBLICACAO: ${{ secrets.GITHUB_TOKEN }}
         run: bash ferramentas/publicar-github.sh
+
+      # Release do repositório público de downloads: é ela que as pessoas
+      # abrem para baixar. O código continua só no privado.
+      # Precisa do segredo TOKEN_DOWNLOADS (token com escrita em
+      # Contents no repositório thlordz/controle-financeiro-downloads).
+      - name: Mandar para a Release pública (downloads)
+        env:
+          TOKEN_PUBLICACAO: ${{ secrets.TOKEN_DOWNLOADS }}
+          REPO_PUBLICACAO: thlordz/controle-financeiro-downloads
+        run: |
+          if [ -z "$TOKEN_PUBLICACAO" ]; then
+            echo "::warning::Sem o segredo TOKEN_DOWNLOADS — não publiquei no repositório de downloads."
+            exit 0
+          fi
+          bash ferramentas/publicar-github.sh

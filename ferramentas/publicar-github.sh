@@ -17,7 +17,10 @@
 # ==================================================================
 set -euo pipefail
 
-REPO="thlordz/controle-financeiro"
+# O repositório de destino. O padrão é o privado, de onde os apps se
+# atualizam; o GitHub Actions roda de novo com REPO_PUBLICACAO apontando
+# para o repositório público de downloads, que é onde as pessoas baixam.
+REPO="${REPO_PUBLICACAO:-thlordz/controle-financeiro}"
 PJ="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PJ"
 
@@ -113,7 +116,12 @@ import json,sys
 print(json.dumps({
   'tag_name': sys.argv[1],
   'name': 'Versão ' + sys.argv[2],
-  'body': 'Atualização automática do Controle Financeiro.',
+  'body': 'Baixe o arquivo do seu aparelho em Assets, logo abaixo:\n\n'
+          '- **Windows**: Controle-Financeiro-Setup.exe\n'
+          '- **Debian/Ubuntu**: controle-financeiro.deb\n'
+          '- **Outros Linux**: Controle-Financeiro.AppImage\n'
+          '- **Android**: Controle-Financeiro.apk\n\n'
+          'No Windows, no AppImage e no Android o app avisa ou se atualiza sozinho nas próximas versões.',
   'draft': False,
   'prerelease': False,
 }))" "$TAG" "$VERSAO")"
@@ -155,7 +163,13 @@ for a in json.load(sys.stdin):
 # aponta para o anexo antigo em vez de subir tudo de novo. O número do
 # anexo vale para o repositório inteiro, não só para a release dele.
 # ------------------------------------------------------------------
-CONHECIDOS="ferramentas/.github-anexos.json"
+# Um arquivo por repositório: o número de um anexo só vale dentro do
+# repositório onde ele foi enviado.
+if [ "$REPO" = "thlordz/controle-financeiro" ]; then
+  CONHECIDOS="ferramentas/.github-anexos.json"
+else
+  CONHECIDOS="ferramentas/.github-anexos-${REPO//\//_}.json"
+fi
 [ -f "$CONHECIDOS" ] || echo '{}' > "$CONHECIDOS"
 
 anexo_conhecido() {
