@@ -1,6 +1,6 @@
 {
   "name": "controle-financeiro",
-  "version": "6.9.0",
+  "version": "7.0.0",
   "description": "Controle Financeiro pessoal",
   "main": "electron/main.js",
   "private": true,
