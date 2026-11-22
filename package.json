@@ -1,7 +1,7 @@
 {
   "name": "controle-financeiro",
-  "version": "6.8.0",
-  "description": "Controle Financeiro pessoal — portátil, com dados no pendrive",
+  "version": "6.9.0",
+  "description": "Controle Financeiro pessoal",
   "main": "electron/main.js",
   "private": true,
   "scripts": {
@@ -41,10 +41,21 @@
     },
     "win": {
       "target": [
-        "dir"
+        "nsis"
       ],
-      "signAndEditExecutable": false,
       "icon": "build-assets/icone.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Controle Financeiro",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build-assets/icone.ico",
+      "uninstallerIcon": "build-assets/icone.ico",
+      "artifactName": "Controle-Financeiro-Setup.${ext}"
     }
   },
   "author": {

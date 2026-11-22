@@ -193,6 +193,18 @@ async function procurar(pastaBase) {
       if (!process.env.APPIMAGE) return null;   // instalado por .deb: quem atualiza é o apt
       pacotes = pacotes.filter((p) => p.nome.endsWith('.AppImage'));
     }
+    // No Windows só o app.tar.gz é trocado (a pasta resources/app); o
+    // executável do Electron e o instalador ficam na release para quem
+    // instala do zero, mas baixá-los aqui era jogar 100+ MB fora.
+    // E se o programa foi instalado num lugar sem permissão de escrita
+    // (Arquivos de Programas, para todos os usuários), não há o que
+    // trocar: quem atualiza é o instalador novo.
+    if (plataforma === 'windows') {
+      pacotes = pacotes.filter((p) => p.nome === 'app.tar.gz');
+      if (!podeEscrever(path.join(path.dirname(process.execPath), 'resources'))) {
+        return null;
+      }
+    }
     if (pacotes.length === 0) return null;
 
     const espera = pastaDeEspera(pastaBase);
@@ -272,7 +284,11 @@ function trocarLinux(espera) {
 }
 
 /**
- * Windows: o programa em si não muda mais (foi para isso que o
+ * Windows (instalado ou portátil): o instalador é por usuário, em
+ * %LOCALAPPDATA%\Programs, então a pasta do programa é gravável sem
+ * pedir administrador e a troca é a mesma da pasta portátil.
+ *
+ * O programa em si não muda mais (foi para isso que o
  * empacotamento saiu), então o que precisa ser trocado é a pasta
  * `resources/app`. Ela está em uso agora, e o Windows não deixa
  * apagar arquivo aberto — por isso quem faz a troca é um ajudante que
@@ -286,6 +302,9 @@ function trocarWindows(espera, pastaDoPrograma) {
   const roteiro = path.join(espera, 'trocar.cmd');
   const linhas = [
     '@echo off',
+    // O roteiro é gravado em UTF-8; sem isto um nome de usuário com
+    // acento quebra os caminhos.
+    'chcp 65001 >nul',
     'setlocal',
     `set ESPERA=${espera}`,
     `set RECURSOS=${recursos}`,

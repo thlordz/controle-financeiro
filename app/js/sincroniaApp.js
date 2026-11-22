@@ -22,6 +22,23 @@ import {
   lerConfiguracao, gravarConfiguracao, estaLigada,
 } from './sincronia.js';
 import { agora, registrarRemocao } from './dominio.js';
+import { juntar } from './juntar.js';
+
+/**
+ * Conta as alterações feitas aqui. A tela avisa a cada uma (pelo
+ * app.js) e a rodada compara o número do começo com o do fim.
+ *
+ * Foi o que faltava para o "lançar vários sumiu": a rodada tira uma
+ * foto dos dados, vai à rede, e no fim troca os dados do app pelo
+ * resultado. O que fosse salvo nesse meio — e "Salvar tudo" com oito
+ * linhas cai nesse meio com frequência, porque a rodada automática
+ * passa de minuto em minuto — não estava na foto e era apagado pela
+ * troca. Agora, se mudou alguma coisa durante a viagem, o resultado é
+ * juntado com o que existe AGORA antes de entrar, e uma nova rodada
+ * sobe o que ficou de fora.
+ */
+let mudancasLocais = 0;
+export function marcarMudancaLocal() { mudancasLocais++; }
 
 /** Preenchidos pelo app.js, que é quem tem os dados na mão. */
 let pegarDados = () => null;
@@ -132,6 +149,7 @@ export async function sincronizarAgora({ silenciosa = false } = {}) {
 
   rodando = true;
   dizer('Sincronizando…');
+  const mudancasNoComeco = mudancasLocais;
 
   try {
     const { marca } = lerConfiguracao();
@@ -141,7 +159,17 @@ export async function sincronizarAgora({ silenciosa = false } = {}) {
     // no meio, a próxima rodada refaz em vez de pular o que não subiu.
     gravarConfiguracao({ marca: r.marca, em: new Date().toISOString() });
 
-    await aplicarDados(r.dados);
+    // Alguém salvou alguma coisa enquanto a rodada estava na rede?
+    // Junta com o que existe agora, para não apagar, e sobe de novo.
+    let resultado = r.dados;
+    if (mudancasLocais !== mudancasNoComeco) {
+      const atuais = pegarDados();
+      if (atuais) resultado = juntar(r.dados, atuais).dados;
+      resultado.sincroniaIniciada = true;
+      repetirDepois = true;
+    }
+
+    await aplicarDados(resultado);
 
     const { adicionados, atualizados, apagados, enviados,
             reetiquetados, resgatados } = r.resumo;

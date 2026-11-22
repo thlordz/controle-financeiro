@@ -2479,37 +2479,54 @@ function telaPlanta() {
    lista de assuntos, e cada um abre a sua. Cada linha já mostra como
    está a coisa, para não obrigar a entrar só pra conferir.
    =================================================================== */
+// Eram onze seções na primeira tela, e achar qualquer coisa virava
+// caça ao tesouro. Agora são quatro: o que é seu e do dia a dia (Geral),
+// a cara do app, o que acontece com os dados, e a versão.
 const SECOES_AJUSTES = {
-  voce:      { nome: 'Você',            icone: 'gente',      cor: 'menta' },
-  inicio:    { nome: 'O que aparece',   icone: 'casa',       cor: 'verde' },
+  geral:     { nome: 'Geral',           icone: 'gente',      cor: 'menta' },
   aparencia: { nome: 'Aparência',       icone: 'sol',        cor: 'ouro' },
-  lembrete:  { nome: 'Lembrete',        icone: 'sino',       cor: 'verde' },
-  planta:    { nome: 'A plantinha',     icone: 'planta',     cor: 'verde' },
-  cartao:    { nome: 'Cartão de crédito', icone: 'cartao',   cor: 'ouro' },
-  banco:     { nome: 'Seu banco',       icone: 'cartao',     cor: 'menta' },
-  backup:    { nome: 'Backup',          icone: 'clipe',      cor: 'ouro' },
-  conferir:  { nome: 'Conferir com o banco', icone: 'check',  cor: 'verde' },
+  dados:     { nome: 'Seus dados',      icone: 'cartao',     cor: 'verde' },
   sobre:     { nome: 'Sobre o app',     icone: 'ajuda',      cor: 'menta' },
-  apagar:    { nome: 'Apagar tudo',     icone: 'fogo',       cor: 'vermelha' },
+};
+
+const SUB_DADOS = {
+  'dados/banco':    { nome: 'Sincronizar aparelhos', icone: 'atualizar', cor: 'menta' },
+  'dados/backup':   { nome: 'Backup',                icone: 'clipe',     cor: 'ouro' },
+  'dados/conferir': { nome: 'Conferir com o banco',  icone: 'check',     cor: 'verde' },
+  'dados/apagar':   { nome: 'Apagar tudo',           icone: 'fogo',      cor: 'vermelha' },
 };
 
 function resumoDaSecao(chave) {
   const c = conexaoGuardada();
+  const geral = [
+    seuNome(),
+    diaDoFechamento() ? `fatura fecha dia ${diaDoFechamento()}` : '',
+    lembrete.ligado ? `lembrete às ${lembrete.hora}` : '',
+  ].filter(Boolean).join(' · ');
   return {
-    voce: seuNome(),
-    inicio: resumoDaTelaInicial(),
+    geral: geral || 'Nome, tela inicial, cartão, lembrete',
     aparencia: `${TEMAS[temaEscolhido()].nome} · ${CORES[visual.cor].nome.toLowerCase()} · ${FUNDOS[visual.fundo].nome.toLowerCase()}`,
-    lembrete: lembrete.ligado ? `Todo dia às ${lembrete.hora}` : 'Desligado',
-    planta: estado.planta
-      ? `${sequencia().dias} dias seguidos · ${escudosDisponiveis(D)} de ${MAX_ESCUDOS} escudos`
-      : 'Desligada',
-    cartao: diaDoFechamento() ? `Fecha dia ${diaDoFechamento()}` : 'Sem dia de fechamento',
-    banco: c && c.ligado ? 'Ligado' : 'Só neste aparelho',
-    backup: 'Guardar ou trazer de volta',
-    conferir: 'Exportar pra comparar com o extrato',
+    dados: c && c.ligado ? 'Sincronizando · backup · conferir' : 'Só neste aparelho · backup · conferir',
     sobre: `Versão ${VERSAO}`,
-    apagar: 'Some com tudo e recomeça',
+    'dados/banco': c && c.ligado ? 'Ligado' : 'Só neste aparelho',
+    'dados/backup': 'Guardar ou trazer de volta',
+    'dados/conferir': 'Exportar pra comparar com o extrato',
+    'dados/apagar': 'Some com tudo e recomeça',
   }[chave];
+}
+
+function listaDeDados() {
+  return `<div class="pilha">
+    ${Object.entries(SUB_DADOS).map(([chave, f]) => `
+      <button class="cartao" onclick="irNoAjuste('${chave}')">
+        <span class="pastilha pastilha--${f.cor}">${icone(f.icone)}</span>
+        <span class="cartao__meio">
+          <div class="chave__nome">${f.nome}</div>
+          <div class="chave__sub">${escapar(resumoDaSecao(chave))}</div>
+        </span>
+        <span class="cartao__acao">${icone('seta',15)}</span>
+      </button>`).join('')}
+  </div>`;
 }
 
 function resumoDaTelaInicial() {
@@ -2655,7 +2672,8 @@ const SUB_APARENCIA = {
 };
 
 function fichaDaSecao(chave) {
-  return SECOES_AJUSTES[chave] || SUB_APARENCIA[chave];
+  return SECOES_AJUSTES[chave] || SUB_APARENCIA[chave] || SUB_DADOS[chave]
+    || SECOES_AJUSTES.geral;
 }
 
 function tituloDaSecao(chave) {
@@ -2672,7 +2690,25 @@ function tituloDaSecao(chave) {
 }
 
 function secaoDeAjuste(chave) {
-  const corpo = {
+  const partes = {
+    // Geral junta numa página só o que antes eram cinco seções curtas.
+    geral: () => `
+      ${partes.voce()}
+      <div class="moldura" style="margin-top:22px">Tela inicial</div>
+      ${partes.inicio()}
+      <div class="moldura" style="margin-top:22px">Cartão de crédito</div>
+      ${partes.cartao()}
+      <div class="moldura" style="margin-top:22px">Lembrete</div>
+      ${partes.lembrete()}
+      <div class="moldura" style="margin-top:22px">A plantinha</div>
+      ${partes.planta()}`,
+
+    dados: () => listaDeDados(),
+    'dados/banco': () => partes.banco(),
+    'dados/backup': () => partes.backup(),
+    'dados/conferir': () => partes.conferir(),
+    'dados/apagar': () => partes.apagar(),
+
     voce: () => `
       <div class="campo">
         <div class="campo__nome">Como eu te chamo?</div>
@@ -2753,8 +2789,8 @@ function secaoDeAjuste(chave) {
           <div class="chave__sub">Se você desligar, ela some da tela inicial e do menu</div>
         </span>
       </label>
-      <div class="moldura" style="margin-top:18px">Assim que o atalho fica na sua tela inicial:</div>
-      ${desenharWidget()}`,
+      ${noCelular() ? `<div class="moldura" style="margin-top:18px">Assim que o atalho fica na sua tela inicial:</div>
+      ${desenharWidget()}` : ''}`,
 
     banco: () => {
       const c = conexaoGuardada();
@@ -2899,7 +2935,12 @@ function secaoDeAjuste(chave) {
           <div class="chave__sub">Some com tudo e começa do zero</div>
         </span>
       </button>`,
-  }[chave];
+  };
+  // Só as chaves que têm entrada na lista viram tela; as peças soltas
+  // (voce, inicio, banco...) existem para montar as de cima. Uma chave
+  // velha guardada no histórico do navegador cai em Geral.
+  const corpo = fichaDaSecao(chave) === SECOES_AJUSTES.geral && chave !== 'geral'
+    ? partes.geral : partes[chave];
   let dentro = '';
   try {
     // Todo o conteúdo de uma seção vai dentro de um painel: sem ele,

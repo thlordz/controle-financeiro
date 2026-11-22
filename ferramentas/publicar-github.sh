@@ -81,31 +81,10 @@ if [ -d "build/win-unpacked/resources/app" ]; then
     | gzip -n -9 > "$TAR_WINDOWS"
 fi
 
-# O Windows completo, para quem ainda não tem o app.
-#
-# O `Controle-Financeiro.exe` sozinho não roda: ele é o electron.exe
-# puro e precisa da pasta `resources` ao lado. Ele continua na release
-# porque é dele que o atualizador se serve, mas quem está instalando
-# pela primeira vez precisa do conjunto — e durante vários meses não
-# havia conjunto nenhum para baixar.
-#
-# A pasta `dados` fica de fora por regra: ela é do dono do pendrive e
-# nunca entra em pacote.
-ZIP_WINDOWS="$PASTA_TMP/Controle-Financeiro-Windows.zip"
-if [ -d "build/win-unpacked" ]; then
-  python3 - "$ZIP_WINDOWS" <<'FIM'
-import os, sys, zipfile
-raiz = 'build/win-unpacked'
-with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-    for pasta, _, arquivos in os.walk(raiz):
-        if '/resources/app/dados' in pasta.replace(os.sep, '/'):
-            continue
-        for a in sorted(arquivos):
-            caminho = os.path.join(pasta, a)
-            z.write(caminho, os.path.relpath(caminho, raiz))
-FIM
-fi
-
+# O Windows completo, para quem ainda não tem o app, agora é um
+# instalador (Controle-Financeiro-Setup.exe). Ele não entra no
+# manifesto ('nenhuma'): o app já instalado se atualiza só com o
+# app.tar.gz, que tem poucas centenas de KB.
 APPIMAGE_ACHADO="$(ls -1t build/*.AppImage 2>/dev/null | head -1)"
 DEB_ACHADO="$(ls -1t build/*.deb 2>/dev/null | head -1)"
 
@@ -113,8 +92,7 @@ PACOTES=(
   "linux|${APPIMAGE_ACHADO:-build/nao-existe}|Controle-Financeiro.AppImage"
   "linux|${DEB_ACHADO:-build/nao-existe}|controle-financeiro.deb"
   "windows|$TAR_WINDOWS|app.tar.gz"
-  "windows|build/win-unpacked/Controle Financeiro.exe|Controle-Financeiro.exe"
-  "nenhuma|${ZIP_WINDOWS:-build/nao-existe}|Controle-Financeiro-Windows.zip"
+  "nenhuma|build/Controle-Financeiro-Setup.exe|Controle-Financeiro-Setup.exe"
   "android|movel/Controle Financeiro.apk|Controle-Financeiro.apk"
 )
 
@@ -256,22 +234,50 @@ done
 # dá para baixar por endereço simples: é preciso pedir o anexo pelo
 # número, com o token.
 # ------------------------------------------------------------------
+# O manifesto que já estava na release, se houver. Quem publica só o
+# Windows (o GitHub Actions, por exemplo) não pode apagar do manifesto
+# o Linux e o Android que subiram antes: as plataformas desta rodada
+# substituem as de lá, e as outras ficam.
+MANIFESTO_ANTIGO="$PASTA_TMP/manifesto-antigo.json"
+echo '{}' > "$MANIFESTO_ANTIGO"
+ID_MANIFESTO_ANTIGO="$(printf '%s' "$ANEXOS" | python3 -c "
+import json,sys
+try:
+    for a in json.load(sys.stdin):
+        if a.get('name') == 'atualizacao.json':
+            print(a['id']); break
+except Exception:
+    pass
+")"
+if [ -n "$ID_MANIFESTO_ANTIGO" ]; then
+  curl -sSL -H "Authorization: Bearer $TOKEN" -H "Accept: application/octet-stream" \
+    "https://api.github.com/repos/$REPO/releases/assets/$ID_MANIFESTO_ANTIGO" \
+    -o "$MANIFESTO_ANTIGO" || echo '{}' > "$MANIFESTO_ANTIGO"
+fi
+
 MANIFESTO="$(python3 -c "
 import json, sys
-versao, linhas = sys.argv[1], sys.argv[2:]
+antigo_arq, versao, linhas = sys.argv[1], sys.argv[2], sys.argv[3:]
+try:
+    antigo = json.load(open(antigo_arq))
+except Exception:
+    antigo = {}
+herdadas = antigo.get('plataformas', {}) if antigo.get('versao') == versao else {}
 plataformas = {}
 for linha in linhas:
     plataforma, nome, id_anexo, soma, tamanho = linha.split('|')
     # 'nenhuma' é o anexo que existe só para gente baixar na mão — o
-    # zip do Windows. Ele não entra no manifesto porque nenhum app
-    # deve puxar 115 MB para se atualizar: para isso há o app.tar.gz.
+    # instalador do Windows. Ele não entra no manifesto porque nenhum
+    # app deve puxar 100 MB para se atualizar: para isso há o app.tar.gz.
     if plataforma == 'nenhuma':
         continue
     plataformas.setdefault(plataforma, []).append({
         'nome': nome, 'anexo': int(id_anexo), 'soma': soma, 'tamanho': int(tamanho),
     })
+for p, pacotes in herdadas.items():
+    plataformas.setdefault(p, pacotes)
 print(json.dumps({'versao': versao, 'plataformas': plataformas}, ensure_ascii=False, indent=1))
-" "$VERSAO" "${LINHAS_MANIFESTO[@]}")"
+" "$MANIFESTO_ANTIGO" "$VERSAO" "${LINHAS_MANIFESTO[@]}")"
 
 ARQ_MANIFESTO="$(mktemp)"
 printf '%s\n' "$MANIFESTO" > "$ARQ_MANIFESTO"

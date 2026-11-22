@@ -1,8 +1,9 @@
 // =========================================================
 // Processo principal do Electron.
-// Pensado para rodar portátil a partir do pendrive: tanto o
-// arquivo de dados quanto as preferências ficam ao lado do
-// executável, não no perfil do usuário.
+// No Windows o app agora é instalado (instalador NSIS, por usuário,
+// sem pedir administrador): preferências em %APPDATA% e dados em
+// Documentos. No Linux (AppImage) e na pasta portátil antiga, tudo
+// continua ao lado do executável, como no pendrive.
 // =========================================================
 
 const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
@@ -10,12 +11,44 @@ const atualizador = require('./atualizador');
 const fs = require('fs');
 const path = require('path');
 
-/** Pasta do executável — funciona no .exe portátil e no AppImage. */
+/**
+ * Instalado pelo instalador do Windows (NSIS)?
+ *
+ * O instalador deixa o desinstalador ao lado do executável; a pasta
+ * portátil antiga não tem. Instalado, a pasta do programa é do
+ * instalador: ele a apaga ao desinstalar e ao instalar versão nova por
+ * cima. Então nada que seja da pessoa pode morar ali.
+ */
+function instalado() {
+  if (process.platform !== 'win32' || !app.isPackaged) return false;
+  const pasta = path.dirname(app.getPath('exe'));
+  try {
+    return fs.readdirSync(pasta).some((n) => /^Uninstall .*\.exe$/i.test(n));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Onde moram as preferências e a atualização baixada.
+ * Portátil: ao lado do executável. Instalado: no perfil do usuário
+ * (%APPDATA%\Controle Financeiro).
+ */
 function pastaBase() {
+  if (instalado()) return app.getPath('userData');
   if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
   if (process.env.APPIMAGE) return path.dirname(process.env.APPIMAGE);
   if (!app.isPackaged) return path.join(__dirname, '..');
   return path.dirname(app.getPath('exe'));
+}
+
+/**
+ * Onde o arquivo de dados fica por padrão. Instalado, vai para
+ * Documentos\Controle Financeiro — fácil de achar e de copiar.
+ */
+function pastaDosDados() {
+  if (instalado()) return path.join(app.getPath('documents'), 'Controle Financeiro');
+  return pastaBase();
 }
 
 const NOME_ARQUIVO = 'controle-financeiro.json';
@@ -33,7 +66,7 @@ const NOME_ARQUIVO = 'controle-financeiro.json';
  * O .exe está um nível abaixo, mas encontra o mesmo arquivo.
  */
 function procurarArquivoDados() {
-  let pasta = pastaBase();
+  let pasta = pastaDosDados();
   for (let i = 0; i < 4; i++) {
     const candidato = path.join(pasta, 'dados', NOME_ARQUIVO);
     if (fs.existsSync(candidato)) return candidato;
@@ -46,7 +79,7 @@ function procurarArquivoDados() {
 
 const ARQUIVO_PREF = () => path.join(pastaBase(), 'preferencias.json');
 const ARQUIVO_PADRAO = () =>
-  procurarArquivoDados() || path.join(pastaBase(), 'dados', NOME_ARQUIVO);
+  procurarArquivoDados() || path.join(pastaDosDados(), 'dados', NOME_ARQUIVO);
 
 function lerPreferencias() {
   try {
@@ -175,7 +208,7 @@ ipcMain.handle('cf:obterArquivo', () => {
 ipcMain.handle('cf:escolherArquivo', async () => {
   const r = await dialog.showOpenDialog(janela, {
     title: 'Escolher o arquivo de dados',
-    defaultPath: pastaBase(),
+    defaultPath: pastaDosDados(),
     filters: [{ name: 'Dados do Controle Financeiro', extensions: ['json'] }],
     properties: ['openFile']
   });
@@ -190,7 +223,7 @@ ipcMain.handle('cf:escolherArquivo', async () => {
 ipcMain.handle('cf:criarArquivo', async (_e, dadosIniciais) => {
   const r = await dialog.showSaveDialog(janela, {
     title: 'Criar arquivo de dados',
-    defaultPath: path.join(pastaBase(), 'dados', 'controle-financeiro.json'),
+    defaultPath: path.join(pastaDosDados(), 'dados', 'controle-financeiro.json'),
     filters: [{ name: 'Dados do Controle Financeiro', extensions: ['json'] }]
   });
   if (r.canceled || !r.filePath) return null;

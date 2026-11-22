@@ -23,7 +23,7 @@ import { cuidarDaAtualizacao } from './atualizacao.js';
 import { estaLigada } from './sincronia.js';
 import {
   configurarSincronia, sincronizarAgora, agendarSincronia,
-  ligarGestosDeSincronia,
+  ligarGestosDeSincronia, marcarMudancaLocal,
 } from './sincroniaApp.js';
 import { normalizar } from './armazenamento.js';
 import {
@@ -39,6 +39,7 @@ let dados = null;
  */
 function aoMexer(novos) {
   dados = novos;
+  marcarMudancaLocal();
   atualizarWidget(dados);
   armazenamento.salvar(dados).catch((e) => armazenamento.relatarFalha(e));
   agendarSincronia();

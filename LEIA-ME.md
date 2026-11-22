@@ -102,16 +102,23 @@ npm install
 npm run dist
 ```
 
-Sai em `build/`: o `.AppImage` do Linux e a pasta `win-unpacked` do Windows.
+Sai em `build/`: o `.AppImage` do Linux e, no Windows, o instalador
+`Controle-Financeiro-Setup.exe` (mais a pasta `win-unpacked`, de onde sai o
+`app.tar.gz` da atualização).
 
-Duas observações sobre o build feito aqui:
+Sobre o instalador do Windows:
 
-- O alvo do Windows é `dir` (pasta) em vez de `portable` (um `.exe` único),
-  porque o `.exe` autoextraível precisa do **Wine** para ser montado no Linux.
-  A pasta funciona igual: é só abrir o executável dentro dela.
-- Pelo mesmo motivo (`signAndEditExecutable: false`), o ícone não fica embutido
-  no `.exe` — o Windows mostra o ícone padrão do Electron. Rodando
-  `npm run dist` **no Windows**, ou com o Wine instalado, o ícone entra.
+- É um instalador NSIS de um clique, **por usuário** (vai para
+  `%LOCALAPPDATA%\Programs`, sem pedir administrador), com atalho na área de
+  trabalho e no menu Iniciar. Ser por usuário é o que deixa o atualizador
+  trocar `resources/app` sem pedir permissão.
+- Instalado, os dados **não** ficam na pasta do programa (o instalador a
+  apaga): o padrão passa a ser `Documentos\Controle Financeiro\dados\` e as
+  preferências vão para `%APPDATA%\Controle Financeiro`. Quem vinha da versão
+  portátil escolhe o arquivo antigo na primeira abertura.
+- Gerar o instalador no Linux precisa do **Wine** (o ícone e o desinstalador
+  são montados por ele). No Windows basta o Node: `npm install` e
+  `npm run dist:win`.
 
 ### Como site local
 
@@ -168,6 +175,18 @@ automática simplesmente não acontece — o app funciona igual.
 O token de escrita, usado para publicar, fica em
 `~/.config/controle-financeiro-tokens/publicacao.txt` (ou na variável
 `TOKEN_PUBLICACAO`, só para aquela vez).
+
+### Publicando o Windows pelo GitHub (sem Node na máquina)
+
+O arquivo `.github/workflows/windows.yml` gera o instalador num Windows do
+próprio GitHub e o anexa na release da versão, com o `app.tar.gz` da
+atualização. Para rodar: mudar o número em `app/js/versao.js`, fazer o commit
+e mandar a tag (`git tag v6.9` e `git push origin v6.9`), ou ir em Actions →
+"Windows: gerar e publicar" → Run workflow.
+
+Precisa do segredo `TOKEN_LEITURA` no repositório (Settings → Secrets and
+variables → Actions) com o token de leitura; sem ele o `.exe` não se atualiza
+sozinho. O manifesto da release guarda o que já estava lá de Linux e Android.
 
 ### Publicando uma versão
 

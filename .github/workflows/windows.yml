@@ -1,0 +1,84 @@
+# ==================================================================
+# Gera o instalador do Windows no GitHub e manda para a Release.
+#
+# Assim não precisa de Node nem de Wine em máquina nenhuma: o GitHub
+# monta o Controle-Financeiro-Setup.exe num Windows dele, e anexa na
+# release da versão (v + o número de app/js/versao.js), junto com o
+# app.tar.gz que o app já instalado usa para se atualizar sozinho.
+#
+# Como rodar:
+#   - Aba Actions → "Windows: gerar e publicar" → Run workflow; ou
+#   - mandar uma tag:  git tag v6.9 && git push origin v6.9
+#
+# Precisa de UM segredo no repositório (Settings → Secrets and
+# variables → Actions → New repository secret):
+#   TOKEN_LEITURA  o token de leitura que vai carimbado no app
+#                  (o mesmo de ~/.config/controle-financeiro-tokens/leitura.txt).
+#                  Sem ele o .exe sai, mas não se atualiza sozinho.
+# A publicação usa o GITHUB_TOKEN do próprio Actions; não precisa criar.
+# ==================================================================
+name: "Windows: gerar e publicar"
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  gerar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Carimbar o token de leitura
+        shell: bash
+        env:
+          TOKEN_LEITURA: ${{ secrets.TOKEN_LEITURA }}
+        run: |
+          if [ -n "$TOKEN_LEITURA" ]; then
+            printf '%s' "$TOKEN_LEITURA" | tr -d '[:space:]' > app/token-leitura.txt
+            echo "Token carimbado."
+          else
+            echo "::warning::Sem o segredo TOKEN_LEITURA — este .exe não vai se atualizar sozinho."
+          fi
+
+      - name: Gerar o instalador
+        run: npx electron-builder --win --publish never
+
+      - name: Guardar o resultado
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            build/Controle-Financeiro-Setup.exe
+            build/win-unpacked/resources/app/
+          if-no-files-found: error
+          retention-days: 7
+
+  publicar:
+    needs: gerar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: build
+
+      - name: Mandar para a Release
+        env:
+          TOKEN_PUBLICACAO: ${{ secrets.GITHUB_TOKEN }}
+        run: bash ferramentas/publicar-github.sh
