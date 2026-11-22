@@ -17,7 +17,7 @@
 #                  Sem ele o .exe sai, mas não se atualiza sozinho.
 # A publicação usa o GITHUB_TOKEN do próprio Actions; não precisa criar.
 # ==================================================================
-name: "Windows: gerar e publicar"
+name: "Windows e Linux: gerar e publicar"
 
 on:
   workflow_dispatch:
@@ -67,8 +67,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # O Linux: AppImage (que se atualiza sozinho) e .deb (para instalar
+  # no Debian/Ubuntu com duplo clique ou `sudo apt install ./arquivo.deb`).
+  gerar-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Carimbar o token de leitura
+        env:
+          TOKEN_LEITURA: ${{ secrets.TOKEN_LEITURA }}
+        run: |
+          if [ -n "$TOKEN_LEITURA" ]; then
+            printf '%s' "$TOKEN_LEITURA" | tr -d '[:space:]' > app/token-leitura.txt
+            echo "Token carimbado."
+          else
+            echo "::warning::Sem o segredo TOKEN_LEITURA — este pacote não vai se atualizar sozinho."
+          fi
+
+      - name: Gerar AppImage e .deb
+        run: npx electron-builder --linux --publish never
+
+      - name: Guardar o resultado
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            build/*.AppImage
+            build/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
   publicar:
-    needs: gerar
+    needs: [gerar, gerar-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +115,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows
+          path: build
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
           path: build
 
       - name: Mandar para a Release
